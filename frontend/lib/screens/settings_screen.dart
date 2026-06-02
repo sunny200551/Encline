@@ -26,7 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isDark = true;
   late final TextEditingController _serverUrlController;
   bool _isCheckingUpdate = false;
-  final String _appVersion = "1.0.0"; // Current local version before update
+  final String _appVersion = "1.0.1"; // Current local version before update
 
   @override
   void initState() {
