@@ -81,12 +81,12 @@ class AppPalettes {
   static const ThemePalette lightCyber = ThemePalette(
     name: 'lightCyber',
     displayName: 'Light Cyber',
-    background: Color(0xFFF1F5F9),
-    surface: Color(0xFFFFFFFF),
-    surfaceLight: Color(0xFFE2E8F0),
-    primary: Color(0xFF2563EB),
-    secondary: Color(0xFF0D9488),
-    accent: Color(0xFF7C3AED),
+    background: Color(0xFFF8FAFC), // Slate 50 - clean off-white background
+    surface: Color(0xFFFFFFFF),    // Pure White for cards/panels
+    surfaceLight: Color(0xFFF1F5F9), // Slate 100 for input fills and borders
+    primary: Color(0xFF2563EB),    // Electric Royal Blue
+    secondary: Color(0xFF0EA5E9),  // Sky Cyan
+    accent: Color(0xFF8B5CF6),     // Cosmic Violet
   );
 
   static const List<ThemePalette> all = [
@@ -209,18 +209,18 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surface,
+        fillColor: isDark ? AppColors.surface : AppColors.surfaceLight, // Soft slate fill in light mode to contrast against white cards
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.surfaceLight),
+          borderSide: BorderSide(color: isDark ? AppColors.surfaceLight : AppColors.surfaceLight.withOpacity(0.5)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.surfaceLight),
+          borderSide: BorderSide(color: isDark ? AppColors.surfaceLight : AppColors.surfaceLight.withOpacity(0.5)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.primary, width: 2),
+          borderSide: BorderSide(color: AppColors.primary, width: 1.5),
         ),
         labelStyle: TextStyle(
             color: isDark ? const Color(0xFF94A3B8) : Colors.black45),

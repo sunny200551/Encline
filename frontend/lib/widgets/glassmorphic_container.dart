@@ -27,16 +27,44 @@ class GlassmorphicContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Use a very light shadow in light mode so it doesn't bleed through the glass filter
+    final shadowColor = isDark 
+        ? Colors.black.withOpacity(0.25) 
+        : Colors.black.withOpacity(0.02);
+
+    final shadowBlur = isDark ? 24.0 : 16.0;
+    final shadowSpread = isDark ? -4.0 : -4.0;
+
+    // Soft gray border in light mode instead of a invisible white border
+    final borderColor = isDark 
+        ? Colors.white.withOpacity(borderOpacity) 
+        : Colors.black.withOpacity(0.06);
+
+    // Increase opacity in light mode to block shadow bleeding and maintain crisp white glass surface
+    final gradientColors = isDark 
+        ? [
+            Colors.white.withOpacity(backgroundOpacity + 0.05),
+            Colors.white.withOpacity(backgroundOpacity),
+          ]
+        : [
+            Colors.white.withOpacity(0.85),
+            Colors.white.withOpacity(0.70),
+          ];
+
     return Container(
       width: width,
       height: height,
       margin: margin,
       decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(borderRadius),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 24,
-            spreadRadius: -4,
+            color: shadowColor,
+            blurRadius: shadowBlur,
+            spreadRadius: shadowSpread,
+            offset: isDark ? const Offset(0, 0) : const Offset(0, 4),
           )
         ],
       ),
@@ -49,14 +77,11 @@ class GlassmorphicContainer extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(borderRadius),
               border: Border.all(
-                color: Colors.white.withOpacity(borderOpacity),
-                width: 1.5,
+                color: borderColor,
+                width: isDark ? 1.5 : 1.0,
               ),
               gradient: LinearGradient(
-                colors: [
-                  Colors.white.withOpacity(backgroundOpacity + 0.05),
-                  Colors.white.withOpacity(backgroundOpacity),
-                ],
+                colors: gradientColors,
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),

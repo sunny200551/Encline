@@ -48,6 +48,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final skipColor = isDark ? Colors.white70 : Colors.black54;
+    final descriptionColor = isDark ? const Color(0xFF94A3B8) : Colors.black54;
+    final dotInactiveColor = isDark ? Colors.white24 : Colors.black12;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
@@ -90,7 +95,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       ),
                       TextButton(
                         onPressed: _completeOnboarding,
-                        child: const Text("Skip", style: TextStyle(color: Colors.white70)),
+                        child: Text("Skip", style: TextStyle(color: skipColor)),
                       ),
                     ],
                   ),
@@ -130,9 +135,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             Text(
                               item.description,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 16,
-                                color: Color(0xFF94A3B8),
+                                color: descriptionColor,
                                 height: 1.5,
                               ),
                             ),
@@ -159,7 +164,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               borderRadius: BorderRadius.circular(4),
                               color: _currentPage == index
                                   ? _slides[_currentPage].color
-                                  : Colors.white24,
+                                  : dotInactiveColor,
                             ),
                           ),
                         ),

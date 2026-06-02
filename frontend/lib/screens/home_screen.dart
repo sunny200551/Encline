@@ -272,7 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
               width: width * 0.35 > 320 ? (width * 0.35 < 400 ? width * 0.35 : 400) : 320,
               decoration: BoxDecoration(
                 border: Border(right: BorderSide(color: AppColors.surfaceLight, width: 0.5)),
-                color: AppColors.surface,
+                color: isDark ? AppColors.surface : AppColors.background,
               ),
               child: _buildSidebar(true, controller),
             ),
@@ -573,7 +573,9 @@ class _HomeScreenState extends State<HomeScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(
-              color: isActive ? AppColors.primary.withValues(alpha: 0.5) : AppColors.surfaceLight.withValues(alpha: 0.2),
+              color: isActive 
+                  ? AppColors.primary.withValues(alpha: 0.5) 
+                  : (isDark ? AppColors.surfaceLight.withValues(alpha: 0.2) : AppColors.surfaceLight),
               width: 1,
             ),
           ),
@@ -645,7 +647,7 @@ class _HomeScreenState extends State<HomeScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(
-              color: AppColors.surfaceLight.withValues(alpha: 0.2),
+              color: isDark ? AppColors.surfaceLight.withValues(alpha: 0.2) : AppColors.surfaceLight,
               width: 1,
             ),
           ),
