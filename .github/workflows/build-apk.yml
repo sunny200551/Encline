@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: # Allows manual triggering from the GitHub Actions UI
+  workflow_dispatch:
 
 jobs:
   build:
@@ -28,6 +28,15 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Accept Android Licenses
+        run: |
+          yes | sdkmanager --licenses || true
+
+      - name: Clean build cache
+        run: |
+          cd frontend
+          flutter clean
+
       - name: Install Dependencies
         run: |
           cd frontend
@@ -36,7 +45,7 @@ jobs:
       - name: Build Release APK
         run: |
           cd frontend
-          flutter build apk --release --no-tree-shake-icons
+          flutter build apk --release
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v3
