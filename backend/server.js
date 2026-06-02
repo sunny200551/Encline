@@ -9,6 +9,17 @@ const server = http.createServer(app);
 // Serve the compiled Flutter Web client statically
 app.use(express.static(path.join(__dirname, '../frontend/build/web')));
 
+// CORS middleware for HTTP endpoints (health check, version checks)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 const io = new Server(server, {
   pingInterval: 10000,
   pingTimeout: 5000,
