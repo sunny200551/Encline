@@ -142,7 +142,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                         const SizedBox(height: 24),
                         
                         // App title
-                        const Text(
+                        Text(
                           "ENCLINE",
                           style: TextStyle(
                             fontSize: 38,
@@ -152,7 +152,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                             shadows: [
                               Shadow(
                                 color: AppColors.secondary,
-                                offset: Offset(0, 0),
+                                offset: const Offset(0, 0),
                                 blurRadius: 12,
                               )
                             ],

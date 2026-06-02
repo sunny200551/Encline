@@ -4,7 +4,7 @@ import '../core/constants.dart';
 class GradientButton extends StatelessWidget {
   final String text;
   final VoidCallback onPressed;
-  final Gradient gradient;
+  final Gradient? gradient;
   final List<BoxShadow>? glow;
   final IconData? icon;
   final bool isLoading;
@@ -13,7 +13,7 @@ class GradientButton extends StatelessWidget {
     Key? key,
     required this.text,
     required this.onPressed,
-    this.gradient = AppColors.primaryGradient,
+    this.gradient,
     this.glow,
     this.icon,
     this.isLoading = false,
@@ -21,10 +21,13 @@ class GradientButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final activeGradient = gradient ?? AppColors.primaryGradient;
+    final activeGlow = glow ?? AppGlow.primaryGlow;
+
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        boxShadow: glow ?? AppGlow.primaryGlow,
+        boxShadow: activeGlow,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
@@ -36,7 +39,7 @@ class GradientButton extends StatelessWidget {
             highlightColor: Colors.white.withOpacity(0.05),
             child: Ink(
               decoration: BoxDecoration(
-                gradient: gradient,
+                gradient: activeGradient,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Container(
