@@ -1,0 +1,585 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
+import 'package:cryptography/cryptography.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'encryption_service.dart';
+import 'signaling_service.dart';
+import 'webrtc_service.dart';
+import 'storage_service.dart';
+import '../models/room.dart';
+import '../models/message.dart';
+import '../models/trusted_contact.dart';
+
+enum SessionStatus {
+  idle,
+  connectingSignaling,
+  creatingRoom,
+  joiningRoom,
+  waitingForPeer,
+  negotiatingEncryption,
+  handshakeComplete,
+  disconnected,
+  error
+}
+
+class RoomSessionController extends ChangeNotifier {
+  final EncryptionService _encryption = EncryptionService();
+  final SignalingService _signaling = SignalingService();
+  final WebRTCService _webrtc = WebRTCService();
+  final StorageService _storage = StorageService();
+
+  // Active state
+  Room? activeRoom;
+  List<Message> messages = [];
+  SessionStatus status = SessionStatus.idle;
+  String? errorMessage;
+  bool isWebRTCOpen = false;
+
+  // Verification state
+  bool isPeerVerified = false;
+  bool isKeyMismatch = false;
+  String? matchedContactName;
+  String? expectedEd25519Key;
+
+  // Temporary keypairs for the active session
+  SimpleKeyPair? _myX25519KeyPair;
+  SimpleKeyPair? _myEd25519KeyPair;
+
+  // Stream subscriptions
+  StreamSubscription? _sigConnSub;
+  StreamSubscription? _sigPeerJoinedSub;
+  StreamSubscription? _sigPeerLeftSub;
+  StreamSubscription? _sigSignalSub;
+  StreamSubscription? _sigRelaySub;
+  StreamSubscription? _sigRoomDestroyedSub;
+  
+  StreamSubscription? _webRTCConnSub;
+  StreamSubscription? _webRTCMessageSub;
+  StreamSubscription? _webRTCChannelSub;
+
+  RoomSessionController() {
+    _setupSignalingStreams();
+    _setupWebRTCStreams();
+  }
+
+  // Setup listeners for Signaling Service events
+  void _setupSignalingStreams() {
+    _sigPeerJoinedSub = _signaling.peerJoinedStream.listen((data) async {
+      print("Controller: Peer joined signaling -> ${data['socketId']}");
+      await _handlePeerJoined(data);
+    });
+
+    _sigPeerLeftSub = _signaling.peerLeftStream.listen((peerSocketId) {
+      print("Controller: Peer left signaling");
+      _addSystemMessage("Peer disconnected from signaling server.");
+      isWebRTCOpen = false;
+      notifyListeners();
+    });
+
+    _sigSignalSub = _signaling.signalStream.listen((data) async {
+      final senderSocketId = data['senderSocketId'];
+      final signalData = data['signalData'];
+      
+      if (signalData['type'] == 'offer') {
+        // Client receives Host offer
+        await _webrtc.handleIncomingSignal(signalData);
+        final answer = await _webrtc.createAnswerAndSetLocal();
+        _signaling.sendSignal(
+          roomId: activeRoom!.id,
+          targetSocketId: senderSocketId,
+          signalData: answer,
+        );
+      } else {
+        await _webrtc.handleIncomingSignal(signalData);
+      }
+    });
+
+    _sigRelaySub = _signaling.relayedMessageStream.listen((data) async {
+      print("Controller: Received relayed socket message fallback");
+      await _handleIncomingEncryptedPayload(data['encryptedPayload']);
+    });
+
+    _sigRoomDestroyedSub = _signaling.roomDestroyedStream.listen((roomId) {
+      if (activeRoom?.id == roomId) {
+        _handleRoomTermination("Room expired or was destroyed by peer.");
+      }
+    });
+  }
+
+  // Setup listeners for WebRTC events
+  void _setupWebRTCStreams() {
+    _webRTCMessageSub = _webrtc.messageStream.listen((payload) async {
+      print("Controller: Received WebRTC message");
+      await _handleIncomingEncryptedPayload(payload);
+    });
+
+    _webRTCChannelSub = _webrtc.channelStateStream.listen((state) {
+      print("Controller: WebRTC Data Channel state -> $state");
+      isWebRTCOpen = (state == RTCDataChannelState.RTCDataChannelOpen);
+      if (isWebRTCOpen) {
+        _addSystemMessage("Secure WebRTC P2P direct channel established.");
+      }
+      notifyListeners();
+    });
+  }
+
+  // 1. Create Room Flow
+  Future<void> createRoom({
+    required String serverUrl,
+    required int roomExpirationMinutes,
+    required int messageExpirationMinutes,
+  }) async {
+    try {
+      _updateStatus(SessionStatus.connectingSignaling);
+      _signaling.connect(serverUrl);
+      
+      // Wait for connection
+      await _waitForSignalingConnection();
+      
+      _updateStatus(SessionStatus.creatingRoom);
+      
+      // Generate temporary keypairs
+      _myX25519KeyPair = await _encryption.generateX25519KeyPair();
+      _myEd25519KeyPair = await _encryption.generateEd25519KeyPair();
+      
+      final myX25519Hex = await _encryption.getPublicKeyHex(_myX25519KeyPair!);
+      final myEd25519Hex = await _encryption.getPublicKeyHex(_myEd25519KeyPair!);
+      final signature = await _encryption.signMessage(myX25519Hex, _myEd25519KeyPair!);
+
+      final response = await _signaling.createRoom(
+        roomExpirationMinutes: roomExpirationMinutes,
+        messageExpirationMinutes: messageExpirationMinutes,
+        x25519PublicKey: myX25519Hex,
+        ed25519PublicKey: myEd25519Hex,
+        signature: signature,
+      );
+
+      if (response['success'] == true) {
+        final roomId = response['roomId'];
+        final expirationTime = DateTime.fromMillisecondsSinceEpoch(response['expirationTime']);
+        
+        activeRoom = Room(
+          id: roomId,
+          expirationTime: expirationTime,
+          messageExpirationMinutes: messageExpirationMinutes,
+          isHost: true,
+          myX25519PublicKeyHex: myX25519Hex,
+          myEd25519PublicKeyHex: myEd25519Hex,
+        );
+
+        messages = [];
+        await _storage.saveRoom(activeRoom!);
+        _addSystemMessage("Room $roomId created. Waiting for peer...");
+        _updateStatus(SessionStatus.waitingForPeer);
+      } else {
+        throw Exception(response['error'] ?? 'Signaling server rejected room creation');
+      }
+    } catch (e) {
+      _handleError("Failed to create room: ${e.toString()}");
+    }
+  }
+
+  // 2. Join Room Flow
+  Future<void> joinRoom({
+    required String serverUrl,
+    required String roomId,
+    String? expectedX25519PublicKeyHex, // Verified if parsed from QR/Invite Link
+    String? expectedEd25519PublicKeyHex,
+  }) async {
+    try {
+      _updateStatus(SessionStatus.connectingSignaling);
+      _signaling.connect(serverUrl);
+      
+      await _waitForSignalingConnection();
+      
+      _updateStatus(SessionStatus.joiningRoom);
+      
+      _myX25519KeyPair = await _encryption.generateX25519KeyPair();
+      _myEd25519KeyPair = await _encryption.generateEd25519KeyPair();
+      
+      final myX25519Hex = await _encryption.getPublicKeyHex(_myX25519KeyPair!);
+      final myEd25519Hex = await _encryption.getPublicKeyHex(_myEd25519KeyPair!);
+      final signature = await _encryption.signMessage(myX25519Hex, _myEd25519KeyPair!);
+
+      final response = await _signaling.joinRoom(
+        roomId: roomId,
+        x25519PublicKey: myX25519Hex,
+        ed25519PublicKey: myEd25519Hex,
+        signature: signature,
+      );
+
+      if (response['success'] == true) {
+        final expirationTime = DateTime.fromMillisecondsSinceEpoch(response['expirationTime']);
+        final messageExpirationMinutes = response['messageExpirationMinutes'];
+        
+        activeRoom = Room(
+          id: roomId,
+          expirationTime: expirationTime,
+          messageExpirationMinutes: messageExpirationMinutes,
+          isHost: false,
+          myX25519PublicKeyHex: myX25519Hex,
+          myEd25519PublicKeyHex: myEd25519Hex,
+        );
+
+        messages = [];
+        _addSystemMessage("Joined room $roomId. Performing handshake...");
+        _updateStatus(SessionStatus.negotiatingEncryption);
+
+        // Parse host peer details
+        final hostPeer = response['peer'];
+        if (hostPeer != null) {
+          final hostX25519Hex = hostPeer['x25519PublicKey'];
+          final hostEd25519Hex = hostPeer['ed25519PublicKey'];
+          final hostSignature = hostPeer['signature'];
+
+          // Secure verification: Out-of-band validation if public keys were in the QR/link
+          if (expectedX25519PublicKeyHex != null && expectedX25519PublicKeyHex != hostX25519Hex) {
+            throw Exception("Security Warning: Man-in-the-middle detected! Host X25519 public key mismatch.");
+          }
+          if (expectedEd25519PublicKeyHex != null && expectedEd25519PublicKeyHex != hostEd25519Hex) {
+            throw Exception("Security Warning: Man-in-the-middle detected! Host Ed25519 public key mismatch.");
+          }
+
+          // Verify signature and check trusted contact matching
+          await _verifyPeerHandshake(
+            peerX25519Hex: hostX25519Hex,
+            peerEd25519Hex: hostEd25519Hex,
+            peerSignatureHex: hostSignature,
+          );
+
+          activeRoom!.peerX25519PublicKeyHex = hostX25519Hex;
+          activeRoom!.peerEd25519PublicKeyHex = hostEd25519Hex;
+
+          // Perform ECDH and derive symmetric key
+          final sharedSecret = await _encryption.performECDH(_myX25519KeyPair!, hostX25519Hex);
+          final derivedKey = await _encryption.deriveSymmetricKey(sharedSecret);
+          activeRoom!.symmetricKey = derivedKey;
+          
+          await _storage.saveRoom(activeRoom!);
+          _addSystemMessage("Handshake complete. End-to-end encryption established.");
+          _updateStatus(SessionStatus.handshakeComplete);
+
+          // Connect WebRTC
+          await _webrtc.initialize(
+            roomId: roomId,
+            targetSocketId: hostPeer['socketId'],
+            signaling: _signaling,
+            isHost: false,
+          );
+        } else {
+          throw Exception("Joined room but host was missing");
+        }
+      } else {
+        throw Exception(response['error'] ?? 'Signaling server rejected room join');
+      }
+    } catch (e) {
+      _handleError(e.toString());
+    }
+  }
+
+  // Handle Host receiving Client details
+  Future<void> _handlePeerJoined(Map<String, dynamic> peerInfo) async {
+    if (activeRoom == null) return;
+    
+    try {
+      _updateStatus(SessionStatus.negotiatingEncryption);
+      
+      final peerSocketId = peerInfo['socketId'];
+      final peerX25519Hex = peerInfo['x25519PublicKey'];
+      final peerEd25519Hex = peerInfo['ed25519PublicKey'];
+      final peerSignature = peerInfo['signature'];
+
+      // Verify signature and check trusted contact matching
+      await _verifyPeerHandshake(
+        peerX25519Hex: peerX25519Hex,
+        peerEd25519Hex: peerEd25519Hex,
+        peerSignatureHex: peerSignature,
+      );
+
+      activeRoom!.peerX25519PublicKeyHex = peerX25519Hex;
+      activeRoom!.peerEd25519PublicKeyHex = peerEd25519Hex;
+
+      // Host performs ECDH and derives key
+      final sharedSecret = await _encryption.performECDH(_myX25519KeyPair!, peerX25519Hex);
+      final derivedKey = await _encryption.deriveSymmetricKey(sharedSecret);
+      activeRoom!.symmetricKey = derivedKey;
+      
+      await _storage.saveRoom(activeRoom!);
+      _addSystemMessage("Peer joined room. End-to-end encryption established.");
+      _updateStatus(SessionStatus.handshakeComplete);
+
+      // Connect WebRTC
+      await _webrtc.initialize(
+        roomId: activeRoom!.id,
+        targetSocketId: peerSocketId,
+        signaling: _signaling,
+        isHost: true,
+      );
+    } catch (e) {
+      _handleError("Handshake failure: ${e.toString()}");
+    }
+  }
+
+  // Cryptographically verify peer signatures and check against trusted pinned contacts
+  Future<void> _verifyPeerHandshake({
+    required String peerX25519Hex,
+    required String peerEd25519Hex,
+    required String? peerSignatureHex,
+  }) async {
+    if (peerSignatureHex == null) {
+      isPeerVerified = false;
+      _addSystemMessage("Security Warning: Peer signature is missing from handshake!");
+      return;
+    }
+
+    final verified = await _encryption.verifySignature(
+      peerX25519Hex,
+      peerSignatureHex,
+      peerEd25519Hex,
+    );
+
+    isPeerVerified = verified;
+    if (!verified) {
+      _addSystemMessage("CRITICAL SECURITY ERROR: Handshake signature verification failed!");
+      return;
+    }
+
+    final contacts = await _storage.getTrustedContacts();
+    final matched = contacts.where((c) => c.ed25519PublicKeyHex == peerEd25519Hex).toList();
+
+    if (matched.isNotEmpty) {
+      matchedContactName = matched.first.nickname;
+      isKeyMismatch = false;
+      _addSystemMessage("Identity Verified: Connected to trusted contact '$matchedContactName'.");
+    } else {
+      matchedContactName = null;
+      if (expectedEd25519Key != null && expectedEd25519Key != peerEd25519Hex) {
+        isKeyMismatch = true;
+        _addSystemMessage("CRITICAL SECURITY WARNING: Pinned identity key mismatch! Eavesdropper or MITM detected!");
+      } else {
+        isKeyMismatch = false;
+        _addSystemMessage("Connected to unverified contact. Save peer as Trusted Contact to secure future chats.");
+      }
+    }
+  }
+
+  Future<void> trustActivePeer(String nickname) async {
+    if (activeRoom == null || 
+        activeRoom!.peerEd25519PublicKeyHex == null || 
+        activeRoom!.peerX25519PublicKeyHex == null) return;
+        
+    final contact = TrustedContact(
+      nickname: nickname,
+      x25519PublicKeyHex: activeRoom!.peerX25519PublicKeyHex!,
+      ed25519PublicKeyHex: activeRoom!.peerEd25519PublicKeyHex!,
+      addedAt: DateTime.now(),
+    );
+    await _storage.saveTrustedContact(contact);
+    matchedContactName = nickname;
+    isPeerVerified = true;
+    notifyListeners();
+  }
+
+  Future<void> removeContact(String ed25519KeyHex) async {
+    await _storage.removeTrustedContact(ed25519KeyHex);
+    if (activeRoom?.peerEd25519PublicKeyHex == ed25519KeyHex) {
+      matchedContactName = null;
+      isPeerVerified = false;
+    }
+    notifyListeners();
+  }
+
+  // 3. Messaging Sending
+  Future<void> sendMessage(String text) async {
+    if (activeRoom == null || activeRoom!.symmetricKey == null) return;
+
+    final messageId = const Uuid().v4();
+    final message = Message(
+      id: messageId,
+      roomId: activeRoom!.id,
+      senderId: 'me',
+      text: text,
+      timestamp: DateTime.now(),
+    );
+
+    // Save message locally in history
+    messages.add(message);
+    await _storage.saveMessage(message);
+    notifyListeners();
+
+    // Encrypt payload
+    final encryptedPayload = await _encryption.encryptChaCha20Poly1305(
+      text, 
+      activeRoom!.symmetricKey!,
+    );
+
+    // Try sending via WebRTC Data Channel first
+    bool sentWebRTC = false;
+    if (isWebRTCOpen) {
+      sentWebRTC = await _webrtc.sendData(encryptedPayload);
+    }
+
+    // Fallback: relay via signaling server if WebRTC failed/closed
+    if (!sentWebRTC) {
+      print("Controller: WebRTC unavailable, using encrypted socket fallback relay");
+      _signaling.sendRelayedMessage(
+        roomId: activeRoom!.id,
+        encryptedPayload: encryptedPayload,
+      );
+    }
+  }
+
+  // Decrypt and process incoming message payload
+  Future<void> _handleIncomingEncryptedPayload(String payload) async {
+    if (activeRoom == null || activeRoom!.symmetricKey == null) return;
+
+    try {
+      final decryptedText = await _encryption.decryptChaCha20Poly1305(
+        payload, 
+        activeRoom!.symmetricKey!,
+      );
+
+      final message = Message(
+        id: const Uuid().v4(),
+        roomId: activeRoom!.id,
+        senderId: 'peer',
+        text: decryptedText,
+        timestamp: DateTime.now(),
+      );
+
+      messages.add(message);
+      await _storage.saveMessage(message);
+      notifyListeners();
+    } catch (e) {
+      print("Failed to decrypt incoming packet: $e");
+    }
+  }
+
+  // Helper to append a system message in the chat feed
+  void _addSystemMessage(String text) {
+    if (activeRoom == null) return;
+    
+    final systemMessage = Message(
+      id: const Uuid().v4(),
+      roomId: activeRoom!.id,
+      senderId: 'system',
+      text: text,
+      timestamp: DateTime.now(),
+      isSystem: true,
+    );
+    messages.add(systemMessage);
+    notifyListeners();
+  }
+
+  // 4. Room Destruction Flow
+  Future<void> destroyActiveRoom() async {
+    if (activeRoom == null) return;
+    
+    print("Explicitly destroying room: ${activeRoom!.id}");
+    
+    // Notify server to destroy room and disconnect others
+    _signaling.destroyRoom(activeRoom!.id);
+    
+    await _handleRoomTermination("Room permanently shredded and destroyed.");
+  }
+
+  // Clean up variables, destroy sockets/WebRTC, wipe messages from device disk
+  Future<void> _handleRoomTermination(String reasonMessage) async {
+    final roomId = activeRoom?.id;
+    
+    _webrtc.close();
+    _signaling.disconnect();
+    isWebRTCOpen = false;
+    
+    if (roomId != null) {
+      // Secure shred message logs
+      await _storage.deleteRoomData(roomId);
+    }
+
+    activeRoom = null;
+    _myX25519KeyPair = null;
+    _myEd25519KeyPair = null;
+    isPeerVerified = false;
+    isKeyMismatch = false;
+    matchedContactName = null;
+    expectedEd25519Key = null;
+    
+    _updateStatus(SessionStatus.disconnected);
+    errorMessage = reasonMessage;
+    notifyListeners();
+  }
+
+  // Helper: Waiting for Socket io connection
+  Future<void> _waitForSignalingConnection() {
+    final completer = Completer<void>();
+    if (_signaling.isConnected) {
+      completer.complete();
+      return completer.future;
+    }
+
+    StreamSubscription? sub;
+    sub = _signaling.connectionStream.listen((connected) {
+      if (connected) {
+        sub?.cancel();
+        if (!completer.isCompleted) completer.complete();
+      }
+    });
+
+    // Timeout after 8 seconds
+    Future.delayed(const Duration(seconds: 8), () {
+      sub?.cancel();
+      if (!completer.isCompleted) {
+        completer.completeError(TimeoutException("Signaling connection timed out"));
+      }
+    });
+
+    return completer.future;
+  }
+
+  void _updateStatus(SessionStatus newStatus) {
+    status = newStatus;
+    notifyListeners();
+  }
+
+  void _handleError(String msg) {
+    print("Session Controller Error: $msg");
+    status = SessionStatus.error;
+    errorMessage = msg;
+    _webrtc.close();
+    _signaling.disconnect();
+    isWebRTCOpen = false;
+    notifyListeners();
+  }
+
+  // Load message logs from disk when user re-opens a recent room
+  Future<void> loadRecentRoomMessages(Room room) async {
+    activeRoom = room;
+    messages = await _storage.getMessages(room.id);
+    status = SessionStatus.handshakeComplete; // Since key is loaded from local storage
+    
+    // Note: Re-establishing live WebRTC is not supported for closed rooms, 
+    // but the message logs can be reviewed until expiration.
+    
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    // Cancel stream subscriptions
+    _sigConnSub?.cancel();
+    _sigPeerJoinedSub?.cancel();
+    _sigPeerLeftSub?.cancel();
+    _sigSignalSub?.cancel();
+    _sigRelaySub?.cancel();
+    _sigRoomDestroyedSub?.cancel();
+    
+    _webRTCConnSub?.cancel();
+    _webRTCMessageSub?.cancel();
+    _webRTCChannelSub?.cancel();
+
+    _signaling.dispose();
+    _webrtc.dispose();
+    super.dispose();
+  }
+}

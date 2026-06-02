@@ -1,0 +1,13 @@
+{
+  "name": "encline-backend",
+  "version": "1.0.0",
+  "description": "Signaling server for ENCLINE temporary encrypted chat rooms",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}

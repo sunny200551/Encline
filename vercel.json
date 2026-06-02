@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "framework": null,
+  "installCommand": "git clone https://github.com/flutter/flutter.git --depth 1 -b stable && export PATH=\"$PATH:`pwd`/flutter/bin\" && flutter doctor",
+  "buildCommand": "export PATH=\"$PATH:`pwd`/flutter/bin\" && cd frontend && flutter build web --release",
+  "outputDirectory": "frontend/build/web"
+}
