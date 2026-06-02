@@ -94,9 +94,22 @@ io.on('connection', (socket) => {
   // 1. Create Room
   socket.on('create-room', (config, callback) => {
     try {
-      const { roomExpirationMinutes, messageExpirationMinutes, x25519PublicKey, ed25519PublicKey, signature } = config;
+      const { roomExpirationMinutes, messageExpirationMinutes, x25519PublicKey, ed25519PublicKey, signature, customRoomId } = config;
       
-      const roomId = generateRoomId();
+      let roomId;
+      if (customRoomId) {
+        roomId = customRoomId.trim().toUpperCase();
+        const codeRegex = /^[A-Z0-9]{10}$/;
+        if (!codeRegex.test(roomId)) {
+          return callback({ success: false, error: 'Custom Room ID must be exactly 10 alphanumeric characters.' });
+        }
+        if (rooms[roomId]) {
+          return callback({ success: false, error: 'This code is already active. Please choose another one.' });
+        }
+      } else {
+        roomId = generateRoomId();
+      }
+      
       const expirationTime = Date.now() + (roomExpirationMinutes * 60 * 1000);
       
       // Schedule room self-destruction

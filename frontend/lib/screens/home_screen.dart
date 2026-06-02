@@ -270,9 +270,9 @@ class _HomeScreenState extends State<HomeScreen> {
             // Left Sidebar Pane
             Container(
               width: width * 0.35 > 320 ? (width * 0.35 < 400 ? width * 0.35 : 400) : 320,
-              decoration: const BoxDecoration(
-                border: Border(right: BorderSide(color: Color(0xFF2f3b43), width: 0.5)),
-                color: Color(0xFF111b21), // WhatsApp Sidebar Color
+              decoration: BoxDecoration(
+                border: Border(right: BorderSide(color: AppColors.surfaceLight, width: 0.5)),
+                color: AppColors.surface,
               ),
               child: _buildSidebar(true, controller),
             ),
@@ -320,6 +320,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSidebar(bool isDesktop, RoomSessionController controller) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hintColor = isDark ? Colors.white54 : Colors.black54;
+    final subHintColor = isDark ? Colors.white30 : Colors.black38;
+    final iconColor = isDark ? Colors.white70 : Colors.black54;
+    final textColor = isDark ? Colors.white : Colors.black87;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -347,7 +353,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     "Secure Ephemeral Rooms",
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.white.withOpacity(0.5),
+                      color: hintColor,
                     ),
                   ),
                 ],
@@ -355,7 +361,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+                    icon: Icon(Icons.settings_outlined, color: iconColor),
                     onPressed: () {
                       if (isDesktop) {
                         setState(() {
@@ -388,21 +394,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.success.withOpacity(0.15),
+                    color: AppColors.success.withValues(alpha: 0.15),
                   ),
                   child: const Icon(Icons.verified_user, color: AppColors.success, size: 16),
                 ),
                 const SizedBox(width: 10),
-                const Column(
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       "E2EE Shield Active",
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
+                      style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 13),
                     ),
                     Text(
                       "X25519 & ChaCha20-Poly1305",
-                      style: TextStyle(fontSize: 10, color: Colors.white54),
+                      style: TextStyle(fontSize: 10, color: hintColor),
                     ),
                   ],
                 ),
@@ -486,7 +492,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: _currentTab == 0 ? FontWeight.bold : FontWeight.normal,
-                          color: _currentTab == 0 ? Colors.white : Colors.white60,
+                          color: _currentTab == 0 ? textColor : hintColor,
                         ),
                       ),
                     ),
@@ -507,7 +513,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: _currentTab == 1 ? FontWeight.bold : FontWeight.normal,
-                          color: _currentTab == 1 ? Colors.white : Colors.white60,
+                          color: _currentTab == 1 ? textColor : hintColor,
                         ),
                       ),
                     ),
@@ -535,13 +541,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildRoomsList(bool isDesktop, RoomSessionController controller) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hintColor = isDark ? Colors.white54 : Colors.black54;
+    final subHintColor = isDark ? Colors.white30 : Colors.black38;
+
     if (_recentRooms.isEmpty) {
       return Center(
         child: Text(
           "No recent sessions.",
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.3),
+            color: hintColor,
             fontSize: 13,
           ),
         ),
@@ -559,18 +569,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          color: isActive ? const Color(0xFF202c33) : AppColors.surface,
+          color: isActive ? AppColors.surfaceLight : AppColors.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(
-              color: isActive ? AppColors.primary.withOpacity(0.5) : Colors.white.withOpacity(0.04),
+              color: isActive ? AppColors.primary.withValues(alpha: 0.5) : AppColors.surfaceLight.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
             leading: CircleAvatar(
-              backgroundColor: (room.isHost ? AppColors.primary : AppColors.accent).withOpacity(0.15),
+              backgroundColor: (room.isHost ? AppColors.primary : AppColors.accent).withValues(alpha: 0.15),
               radius: 18,
               child: Icon(
                 room.isHost ? Icons.dns_outlined : Icons.supervised_user_circle_outlined,
@@ -584,7 +594,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             subtitle: Text(
               "Expires: ${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}",
-              style: const TextStyle(color: Colors.white54, fontSize: 11),
+              style: TextStyle(color: hintColor, fontSize: 11),
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
@@ -593,7 +603,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 18),
                   onPressed: () => _deleteRoom(room.id),
                 ),
-                const Icon(Icons.chevron_right, color: Colors.white24, size: 16),
+                Icon(Icons.chevron_right, color: subHintColor, size: 16),
               ],
             ),
             onTap: () => _openRecentRoom(room),
@@ -604,6 +614,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildContactsList(bool isDesktop) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hintColor = isDark ? Colors.white54 : Colors.black54;
+    final subHintColor = isDark ? Colors.white30 : Colors.black38;
+
     if (_trustedContacts.isEmpty) {
       return Center(
         child: Padding(
@@ -612,7 +626,7 @@ class _HomeScreenState extends State<HomeScreen> {
             "No trusted keys pinned.\nSave peers during active sessions.",
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.3),
+              color: hintColor,
               fontSize: 12,
             ),
           ),
@@ -631,14 +645,14 @@ class _HomeScreenState extends State<HomeScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(
-              color: Colors.white.withOpacity(0.04),
+              color: AppColors.surfaceLight.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
             leading: CircleAvatar(
-              backgroundColor: AppColors.success.withOpacity(0.15),
+              backgroundColor: AppColors.success.withValues(alpha: 0.15),
               radius: 18,
               child: const Icon(
                 Icons.verified_outlined,
@@ -652,12 +666,12 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             subtitle: Text(
               "Key: ${contact.ed25519PublicKeyHex.substring(0, 6)}...${contact.ed25519PublicKeyHex.substring(contact.ed25519PublicKeyHex.length - 6)}",
-              style: const TextStyle(color: Colors.white38, fontSize: 10),
+              style: TextStyle(color: subHintColor, fontSize: 10),
             ),
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: AppColors.success.withOpacity(0.1),
+                color: AppColors.success.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Text(
@@ -721,8 +735,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildWelcomeState() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hintColor = isDark ? Colors.white54 : Colors.black54;
+    final subHintColor = isDark ? Colors.white30 : Colors.black38;
+
     return Container(
-      color: const Color(0xFF222e35), // WhatsApp Web empty right pane dark color
+      color: AppColors.background,
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -731,12 +749,12 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF00a884).withOpacity(0.04),
+                color: AppColors.primary.withValues(alpha: 0.05),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.vpn_lock_outlined,
                 size: 80,
-                color: Color(0xFF00a884),
+                color: AppColors.primary,
               ),
             ),
             const SizedBox(height: 24),
@@ -750,7 +768,7 @@ class _HomeScreenState extends State<HomeScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
-                color: Colors.white.withOpacity(0.4),
+                color: hintColor,
                 height: 1.5,
               ),
             ),
@@ -758,11 +776,11 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.lock_outline, size: 14, color: Colors.white30),
+                Icon(Icons.lock_outline, size: 14, color: subHintColor),
                 const SizedBox(width: 6),
                 Text(
                   "ChaCha20-Poly1305 & X25519 ECDH Protected",
-                  style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.3)),
+                  style: TextStyle(fontSize: 11, color: subHintColor),
                 ),
               ],
             )

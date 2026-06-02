@@ -23,6 +23,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _msgExpirationTimer;
   String _timeRemainingStr = "00:00";
   bool _showTrustForm = false;
+  bool _hasPopped = false;
 
   @override
   void initState() {
@@ -157,6 +158,7 @@ class _ChatScreenState extends State<ChatScreen> {
       await controller.destroyActiveRoom();
       if (!mounted) return;
       if (!widget.isEmbedded) {
+        _hasPopped = true;
         Navigator.of(context).pop();
       }
     }
@@ -192,18 +194,24 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     final controller = Provider.of<RoomSessionController>(context);
     final room = controller.activeRoom;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // If room is terminated, pop back to home if not embedded
     if (room == null && controller.status == SessionStatus.disconnected) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(controller.errorMessage ?? "Room terminated."),
-            backgroundColor: AppColors.warning,
-          ),
-        );
-        if (!widget.isEmbedded) {
-          Navigator.of(context).pop();
+        if (!_hasPopped) {
+          _hasPopped = true;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(controller.errorMessage ?? "Room terminated."),
+              backgroundColor: AppColors.warning,
+            ),
+          );
+          if (!widget.isEmbedded) {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+          }
         }
       });
       return _buildEmptyState();
@@ -217,7 +225,7 @@ class _ChatScreenState extends State<ChatScreen> {
         controller.matchedContactName ?? "Peer (${room.id})";
 
     final chatWidget = Container(
-      color: const Color(0xFF0b141a), // WhatsApp Dark Background
+      color: AppColors.background,
       child: Column(
         children: [
           // Header Bar
@@ -254,24 +262,29 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0b141a),
+      backgroundColor: AppColors.background,
       body: SafeArea(child: chatWidget),
     );
   }
 
   Widget _buildEmptyState() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      color: const Color(0xFF222e35),
-      child: const Center(
+      color: AppColors.background,
+      child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.lock_person_outlined, size: 64, color: Colors.white12),
-            SizedBox(height: 16),
+            Icon(
+              Icons.lock_person_outlined,
+              size: 64,
+              color: isDark ? Colors.white12 : Colors.black12,
+            ),
+            const SizedBox(height: 16),
             Text(
               "No active secure room",
               style: TextStyle(
-                color: Colors.white30,
+                color: isDark ? Colors.white30 : Colors.black38,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
@@ -283,29 +296,37 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildHeader(String name, RoomSessionController controller) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final titleColor = isDark ? Colors.white : Colors.black87;
+    final subtextColor = isDark ? Colors.white38 : Colors.black45;
+    final iconColor = isDark ? Colors.white70 : Colors.black54;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: const BoxDecoration(
-        color: Color(0xFF202c33), // WhatsApp Header Color
+      decoration: BoxDecoration(
+        color: AppColors.surface,
         border: Border(
-          bottom: BorderSide(color: Color(0xFF2f3b43), width: 0.5),
+          bottom: BorderSide(color: AppColors.surfaceLight, width: 0.5),
         ),
       ),
       child: Row(
         children: [
           if (!widget.isEmbedded)
             IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white70),
-              onPressed: () => Navigator.of(context).pop(),
+              icon: Icon(Icons.arrow_back, color: iconColor),
+              onPressed: () {
+                _hasPopped = true;
+                Navigator.of(context).pop();
+              },
             ),
           CircleAvatar(
-            backgroundColor: const Color(0xFF00a884).withValues(alpha: 0.15),
+            backgroundColor: AppColors.primary.withValues(alpha: 0.15),
             radius: 20,
             child: Icon(
               Icons.person,
               color: controller.isPeerVerified
-                  ? const Color(0xFF00a884)
-                  : Colors.white54,
+                  ? AppColors.primary
+                  : (isDark ? Colors.white54 : Colors.black45),
             ),
           ),
           const SizedBox(width: 12),
@@ -317,17 +338,17 @@ class _ChatScreenState extends State<ChatScreen> {
                   children: [
                     Text(
                       name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: titleColor,
                         fontSize: 15,
                       ),
                     ),
                     if (controller.isPeerVerified) ...[
                       const SizedBox(width: 4),
-                      const Icon(
+                      Icon(
                         Icons.verified,
-                        color: Color(0xFF00a884),
+                        color: AppColors.primary,
                         size: 16,
                       ),
                     ],
@@ -341,8 +362,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           ? Icons.shield
                           : Icons.lock_outline,
                       color: controller.isWebRTCOpen
-                          ? const Color(0xFF00a884)
-                          : Colors.white38,
+                          ? AppColors.primary
+                          : subtextColor,
                       size: 11,
                     ),
                     const SizedBox(width: 4),
@@ -353,8 +374,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       style: TextStyle(
                         fontSize: 10,
                         color: controller.isWebRTCOpen
-                            ? const Color(0xFF00a884)
-                            : Colors.white38,
+                            ? AppColors.primary
+                            : subtextColor,
                       ),
                     ),
                   ],
@@ -366,7 +387,7 @@ class _ChatScreenState extends State<ChatScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: const Color(0xFF182229),
+              color: AppColors.background,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -390,7 +411,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           const SizedBox(width: 8),
           IconButton(
-            icon: const Icon(Icons.close, color: Colors.white54),
+            icon: Icon(Icons.close, color: iconColor),
             tooltip: "Destroy Conversation",
             onPressed: _destroyRoom,
           ),
@@ -424,9 +445,13 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildUnverifiedContactBanner(RoomSessionController controller) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bannerBg = isDark ? const Color(0xFF182229) : AppColors.surfaceLight;
+    final hintColor = isDark ? Colors.white70 : Colors.black87;
+
     return Container(
       width: double.infinity,
-      color: const Color(0xFF182229),
+      color: bannerBg,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -434,13 +459,13 @@ class _ChatScreenState extends State<ChatScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.lock_open, color: Color(0xFF00a884), size: 16),
-                  SizedBox(width: 8),
+                  Icon(Icons.lock_open, color: AppColors.primary, size: 16),
+                  const SizedBox(width: 8),
                   Text(
                     "Handshake Verified. Save peer as Trusted Contact?",
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                    style: TextStyle(color: hintColor, fontSize: 12),
                   ),
                 ],
               ),
@@ -451,10 +476,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     minimumSize: const Size(50, 30),
                   ),
                   onPressed: () => setState(() => _showTrustForm = true),
-                  child: const Text(
+                  child: Text(
                     "Save Contact",
                     style: TextStyle(
-                      color: Color(0xFF00a884),
+                      color: AppColors.primary,
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
@@ -471,14 +496,14 @@ class _ChatScreenState extends State<ChatScreen> {
                     height: 38,
                     child: TextField(
                       controller: _nameController,
-                      style: const TextStyle(fontSize: 13),
-                      decoration: const InputDecoration(
+                      style: TextStyle(fontSize: 13, color: isDark ? Colors.white : Colors.black87),
+                      decoration: InputDecoration(
                         hintText: "Enter contact name (e.g. Alice)",
                         hintStyle: TextStyle(
-                          color: Colors.white30,
+                          color: isDark ? Colors.white30 : Colors.black38,
                           fontSize: 13,
                         ),
-                        contentPadding: EdgeInsets.symmetric(
+                        contentPadding: const EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 0,
                         ),
@@ -489,7 +514,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 const SizedBox(width: 12),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00a884),
+                    backgroundColor: AppColors.primary,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 0,
@@ -505,9 +530,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 const SizedBox(width: 8),
                 TextButton(
                   onPressed: () => setState(() => _showTrustForm = false),
-                  child: const Text(
+                  child: Text(
                     "Cancel",
-                    style: TextStyle(color: Colors.white60, fontSize: 13),
+                    style: TextStyle(color: isDark ? Colors.white60 : Colors.black54, fontSize: 13),
                   ),
                 ),
               ],
@@ -519,18 +544,22 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildSystemBubble(String text) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Center(
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: const Color(0xFF182229), // WhatsApp Info bubble
+          color: isDark ? const Color(0xFF182229) : AppColors.surfaceLight,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
           text,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Color(0xFFffd279), fontSize: 11),
+          style: TextStyle(
+            color: isDark ? const Color(0xFFffd279) : const Color(0xFFb47a00),
+            fontSize: 11,
+          ),
         ),
       ),
     );
@@ -538,6 +567,18 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildChatBubble(Message msg) {
     final isMe = msg.isMe;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bubbleColor = isMe
+        ? AppColors.primary
+        : AppColors.surface;
+
+    final textColor = isMe
+        ? Colors.white
+        : (isDark ? Colors.white : Colors.black87);
+
+    final timeColor = isMe
+        ? Colors.white70
+        : (isDark ? Colors.white30 : Colors.black38);
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -550,9 +591,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         padding: const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 6),
         decoration: BoxDecoration(
-          color: isMe
-              ? const Color(0xFF005c4b)
-              : const Color(0xFF202c33), // WhatsApp message bubble colors
+          color: bubbleColor,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(12),
             topRight: const Radius.circular(12),
@@ -572,8 +611,8 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             Text(
               msg.text,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: textColor,
                 fontSize: 14.5,
                 height: 1.3,
               ),
@@ -586,7 +625,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 Text(
                   "${msg.timestamp.hour.toString().padLeft(2, '0')}:${msg.timestamp.minute.toString().padLeft(2, '0')}",
                   style: TextStyle(
-                    color: isMe ? Colors.white54 : Colors.white30,
+                    color: timeColor,
                     fontSize: 9,
                   ),
                 ),
@@ -602,9 +641,21 @@ class _ChatScreenState extends State<ChatScreen> {
     final room = controller.activeRoom;
     final isConnected = room != null && room.symmetricKey != null;
     final hint = isConnected ? "Type a message" : "Waiting for secure connection...";
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final inputColor = isConnected
+        ? (isDark ? Colors.white : Colors.black87)
+        : (isDark ? Colors.white30 : Colors.black38);
+
+    final hintTextStyle = TextStyle(
+      color: isConnected
+          ? (isDark ? Colors.white30 : Colors.black38)
+          : (isDark ? Colors.white10 : Colors.black26),
+      fontSize: 14.5,
+    );
 
     return Container(
-      color: const Color(0xFF202c33), // WhatsApp Input bar color
+      color: AppColors.surface,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
@@ -616,21 +667,16 @@ class _ChatScreenState extends State<ChatScreen> {
                 maxLines: null,
                 enabled: isConnected,
                 keyboardType: TextInputType.multiline,
-                style: TextStyle(color: isConnected ? Colors.white : Colors.white30, fontSize: 14.5),
+                style: TextStyle(color: inputColor, fontSize: 14.5),
                 decoration: InputDecoration(
                   hintText: hint,
-                  hintStyle: TextStyle(
-                    color: isConnected ? Colors.white24 : Colors.white10,
-                    fontSize: 14.5,
-                  ),
+                  hintStyle: hintTextStyle,
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 0,
                   ),
                   filled: true,
-                  fillColor: const Color(
-                    0xFF2a3942,
-                  ), // WhatsApp input background
+                  fillColor: AppColors.background,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(22),
                     borderSide: BorderSide.none,
@@ -644,10 +690,16 @@ class _ChatScreenState extends State<ChatScreen> {
           CircleAvatar(
             radius: 20,
             backgroundColor: isConnected
-                ? const Color(0xFF00a884)
-                : const Color(0xFF2a3942), // WhatsApp green send button
+                ? AppColors.primary
+                : AppColors.surfaceLight,
             child: IconButton(
-              icon: Icon(Icons.send, color: isConnected ? Colors.white : Colors.white30, size: 16),
+              icon: Icon(
+                Icons.send,
+                color: isConnected
+                    ? Colors.white
+                    : (isDark ? Colors.white30 : Colors.black26),
+                size: 16,
+              ),
               onPressed: isConnected ? _sendMessage : null,
             ),
           ),

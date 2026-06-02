@@ -25,7 +25,7 @@ class EnclineApp extends StatelessWidget {
           return MaterialApp(
             title: 'ENCLINE',
             debugShowCheckedModeBanner: false,
-            theme: AppTheme.darkTheme,
+            theme: AppTheme.getTheme(themeController.isLightTheme ? Brightness.light : Brightness.dark),
             home: const SplashScreen(),
           );
         },

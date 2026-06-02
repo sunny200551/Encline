@@ -246,6 +246,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hintColor = isDark ? Colors.white54 : Colors.black54;
+    final subHintColor = isDark ? Colors.white30 : Colors.black38;
+    final iconColor = isDark ? Colors.white70 : Colors.black54;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subTextColor = isDark ? Colors.white70 : Colors.black54;
+    final dividerColor = isDark ? Colors.white10 : Colors.black12;
+
     return Scaffold(
       backgroundColor: widget.isEmbedded ? Colors.transparent : AppColors.background,
       appBar: widget.isEmbedded
@@ -264,7 +272,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                    icon: Icon(Icons.arrow_back, color: iconColor),
                     onPressed: widget.onBack,
                   ),
                   const Text(
@@ -276,18 +284,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 16),
             ],
             // Theme settings Card
-            GlassmorphicContainer(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              borderRadius: 16,
-              backgroundOpacity: 0.03,
-              child: SwitchListTile(
-                value: _isDark,
-                onChanged: _toggleTheme,
-                title: const Text("Force Dark Mode"),
-                subtitle: const Text("Recommended for glassmorphism aesthetics"),
-                activeThumbColor: AppColors.primary,
-                contentPadding: EdgeInsets.zero,
-              ),
+            Consumer<ThemeController>(
+              builder: (context, themeController, _) {
+                return GlassmorphicContainer(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  borderRadius: 16,
+                  backgroundOpacity: 0.03,
+                  child: SwitchListTile(
+                    value: !themeController.isLightTheme,
+                    onChanged: (isDarkTheme) {
+                      themeController.setTheme(isDarkTheme ? 'techBlue' : 'lightCyber');
+                    },
+                    title: const Text("Dark Mode"),
+                    subtitle: Text("Toggle between premium dark and light theme styles", style: TextStyle(color: hintColor, fontSize: 12)),
+                    activeThumbColor: AppColors.primary,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                );
+              }
             ),
             const SizedBox(height: 24),
 
@@ -306,9 +320,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         "Choose a color palette for the interface:",
-                        style: TextStyle(fontSize: 12, color: Colors.white54),
+                        style: TextStyle(fontSize: 12, color: hintColor),
                       ),
                       const SizedBox(height: 16),
                       SizedBox(
@@ -346,7 +360,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     boxShadow: isSelected
                                         ? [
                                             BoxShadow(
-                                              color: palette.primary.withOpacity(0.4),
+                                              color: palette.primary.withValues(alpha: 0.4),
                                               blurRadius: 8,
                                               spreadRadius: 1,
                                             )
@@ -391,16 +405,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     "Configure default room and handshake server:",
-                    style: TextStyle(fontSize: 12, color: Colors.white54),
+                    style: TextStyle(fontSize: 12, color: hintColor),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _serverUrlController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: "http://10.0.2.2:3000",
-                      prefixIcon: Icon(Icons.dns, color: Colors.white54),
+                      prefixIcon: Icon(Icons.dns, color: hintColor),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -478,30 +492,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.all(16),
               borderRadius: 16,
               backgroundOpacity: 0.05,
-              child: const Column(
+              child: Column(
                 children: [
                   _CryptoInfoRow(
                     label: "Key Agreement",
                     value: "Diffie-Hellman (X25519)",
                     desc: "Symmetric key negotiated out-of-band.",
+                    subTextColor: subTextColor,
                   ),
-                  Divider(color: Colors.white10),
+                  Divider(color: dividerColor),
                   _CryptoInfoRow(
                     label: "Symmetric Encryption",
                     value: "ChaCha20-Poly1305 (AEAD)",
                     desc: "Authentic encryption for all text packages.",
+                    subTextColor: subTextColor,
                   ),
-                  Divider(color: Colors.white10),
+                  Divider(color: dividerColor),
                   _CryptoInfoRow(
                     label: "Identity Verification",
                     value: "Ed25519 Signatures",
                     desc: "Ensures peer claims belong to the room.",
+                    subTextColor: subTextColor,
                   ),
-                  Divider(color: Colors.white10),
+                  Divider(color: dividerColor),
                   _CryptoInfoRow(
                     label: "Key Derivation (KDF)",
                     value: "SHA-256 Digest",
                     desc: "Symmetric key derived from shared secret.",
+                    subTextColor: subTextColor,
                   ),
                 ],
               ),
@@ -518,22 +536,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.all(16),
               borderRadius: 16,
               backgroundOpacity: 0.03,
-              child: const Column(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _PrivacyPoint(
                     icon: Icons.cloud_off,
                     text: "No messages are ever sent to or stored in a database server.",
+                    subTextColor: subTextColor,
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   _PrivacyPoint(
                     icon: Icons.location_disabled,
                     text: "Zero telemetry, metrics, analytics, or trackers compiled inside.",
+                    subTextColor: subTextColor,
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   _PrivacyPoint(
                     icon: Icons.security_update_good,
                     text: "Keys are stored in memory and deleted instantly when rooms close.",
+                    subTextColor: subTextColor,
                   ),
                 ],
               ),
@@ -558,11 +579,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     padding: const EdgeInsets.all(16),
                     borderRadius: 16,
                     backgroundOpacity: 0.03,
-                    child: const Center(
+                    child: Center(
                       child: Text(
                         "No trusted contacts pinned yet. Save contact signatures during a chat session.",
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: Colors.white54),
+                        style: TextStyle(fontSize: 12, color: hintColor),
                       ),
                     ),
                   );
@@ -581,7 +602,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         title: Text(c.nickname, style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(
                           "Ed25519 Key: ${c.ed25519PublicKeyHex.substring(0, 8)}...${c.ed25519PublicKeyHex.substring(c.ed25519PublicKeyHex.length - 8)}",
-                          style: const TextStyle(fontSize: 11, color: Colors.white38),
+                          style: TextStyle(fontSize: 11, color: hintColor),
                         ),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete_outline, color: AppColors.error),
@@ -626,11 +647,13 @@ class _CryptoInfoRow extends StatelessWidget {
   final String label;
   final String value;
   final String desc;
+  final Color subTextColor;
 
   const _CryptoInfoRow({
     required this.label,
     required this.value,
     required this.desc,
+    required this.subTextColor,
   });
 
   @override
@@ -643,12 +666,12 @@ class _CryptoInfoRow extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white70)),
+              Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: subTextColor)),
               Text(value, style: TextStyle(color: AppColors.secondary, fontSize: 13, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 2),
-          Text(desc, style: const TextStyle(fontSize: 11, color: Colors.white38)),
+          Text(desc, style: TextStyle(fontSize: 11, color: subTextColor.withValues(alpha: 0.6))),
         ],
       ),
     );
@@ -658,8 +681,9 @@ class _CryptoInfoRow extends StatelessWidget {
 class _PrivacyPoint extends StatelessWidget {
   final IconData icon;
   final String text;
+  final Color subTextColor;
 
-  const _PrivacyPoint({required this.icon, required this.text});
+  const _PrivacyPoint({required this.icon, required this.text, required this.subTextColor});
 
   @override
   Widget build(BuildContext context) {
@@ -669,7 +693,7 @@ class _PrivacyPoint extends StatelessWidget {
         Icon(icon, color: AppColors.secondary, size: 18),
         const SizedBox(width: 12),
         Expanded(
-          child: Text(text, style: const TextStyle(fontSize: 13, color: Colors.white70, height: 1.4)),
+          child: Text(text, style: TextStyle(fontSize: 13, color: subTextColor, height: 1.4)),
         ),
       ],
     );

@@ -94,78 +94,97 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
     });
 
     try {
-      final uri = Uri.parse(url);
-      
-      // Parse parameters from query string
-      Map<String, String> params = Map.from(uri.queryParameters);
-      
-      // Check if hash fragment contains query parameters (typical in Flutter Web)
-      if (uri.fragment.isNotEmpty && uri.fragment.contains('?')) {
-        final fragParts = uri.fragment.split('?');
-        if (fragParts.length > 1) {
-          final queryStr = fragParts[1];
-          final fragUri = Uri.parse('?$queryStr');
-          params.addAll(fragUri.queryParameters);
+      String roomId = '';
+      String? serverUrl;
+      String? x25519Key;
+      String? ed25519Key;
+
+      final codeRegex = RegExp(r'^[a-zA-Z0-9]{6}$|^[a-zA-Z0-9]{10}$');
+      if (codeRegex.hasMatch(url)) {
+        roomId = url.toUpperCase();
+        final storage = StorageService();
+        serverUrl = await storage.getDefaultServerUrl();
+      } else {
+        final uri = Uri.parse(url);
+        
+        // Parse parameters from query string
+        Map<String, String> params = Map.from(uri.queryParameters);
+        
+        // Check if hash fragment contains query parameters (typical in Flutter Web)
+        if (uri.fragment.isNotEmpty && uri.fragment.contains('?')) {
+          final fragParts = uri.fragment.split('?');
+          if (fragParts.length > 1) {
+            final queryStr = fragParts[1];
+            final fragUri = Uri.parse('?$queryStr');
+            params.addAll(fragUri.queryParameters);
+          }
+        }
+
+        roomId = params['room']?.toUpperCase() ?? '';
+        serverUrl = params['server'];
+        x25519Key = params['x25519'];
+        ed25519Key = params['ed25519'];
+
+        if (roomId.isEmpty || serverUrl == null) {
+          throw Exception("Invalid link format. Please provide a valid connect link or a 6/10-digit code.");
         }
       }
 
-      final roomId = params['room']?.toUpperCase();
-      String? serverUrl = params['server'];
-      final x25519Key = params['x25519'];
-      final ed25519Key = params['ed25519'];
-
-      if (roomId == null || serverUrl == null || x25519Key == null || ed25519Key == null) {
-        throw Exception("Invite link is missing crucial encryption keys or room parameters.");
-      }
-
       // Automatically sanitize localhost/127.0.0.1/10.0.2.2 if remote host context exists
-      final serverUri = Uri.tryParse(serverUrl);
-      if (serverUri != null) {
-        final host = serverUri.host;
-        final isLocalhost = host == 'localhost' || host == '127.0.0.1' || host == '10.0.2.2';
-        
-        if (isLocalhost) {
-          if (uri.scheme.startsWith('http')) {
-            final inviteHost = uri.host;
-            final isInviteLocalhost = inviteHost == 'localhost' || inviteHost == '127.0.0.1' || inviteHost == '10.0.2.2';
-            if (!isInviteLocalhost) {
-              serverUrl = serverUri.replace(
-                host: uri.host,
-                port: uri.hasPort ? uri.port : null,
-              ).toString();
-              print("Join: Rewrote localhost server URL to invite link host -> $serverUrl");
-            }
-          } else if (kIsWeb) {
-            final baseUri = Uri.base;
-            if (baseUri.scheme.startsWith('http')) {
-              final baseHost = baseUri.host;
-              final isBaseLocalhost = baseHost == 'localhost' || baseHost == '127.0.0.1' || baseHost == '10.0.2.2';
-              if (!isBaseLocalhost) {
+      if (serverUrl != null) {
+        final serverUri = Uri.tryParse(serverUrl);
+        if (serverUri != null) {
+          final host = serverUri.host;
+          final isLocalhost = host == 'localhost' || host == '127.0.0.1' || host == '10.0.2.2';
+          
+          if (isLocalhost) {
+            final uri = Uri.tryParse(url);
+            if (uri != null && uri.scheme.startsWith('http')) {
+              final inviteHost = uri.host;
+              final isInviteLocalhost = inviteHost == 'localhost' || inviteHost == '127.0.0.1' || inviteHost == '10.0.2.2';
+              if (!isInviteLocalhost) {
                 serverUrl = serverUri.replace(
-                  host: baseUri.host,
-                  port: baseUri.hasPort ? baseUri.port : null,
+                  host: uri.host,
+                  port: uri.hasPort ? uri.port : null,
                 ).toString();
-                print("Join: Rewrote localhost server URL to web origin host -> $serverUrl");
+                print("Join: Rewrote localhost server URL to invite link host -> $serverUrl");
               }
-            }
-          } else {
-            // APK Native - replace with saved default server host if it's not localhost itself
-            final storage = StorageService();
-            final defaultUrl = await storage.getDefaultServerUrl();
-            final defaultUri = Uri.tryParse(defaultUrl);
-            if (defaultUri != null && defaultUri.scheme.startsWith('http')) {
-              final defaultHost = defaultUri.host;
-              final isDefaultLocalhost = defaultHost == 'localhost' || defaultHost == '127.0.0.1' || defaultHost == '10.0.2.2';
-              if (!isDefaultLocalhost) {
-                serverUrl = serverUri.replace(
-                  host: defaultUri.host,
-                  port: defaultUri.hasPort ? defaultUri.port : null,
-                ).toString();
-                print("Join: Rewrote localhost server URL to saved default host -> $serverUrl");
+            } else if (kIsWeb) {
+              final baseUri = Uri.base;
+              if (baseUri.scheme.startsWith('http')) {
+                final baseHost = baseUri.host;
+                final isBaseLocalhost = baseHost == 'localhost' || baseHost == '127.0.0.1' || baseHost == '10.0.2.2';
+                if (!isBaseLocalhost) {
+                  serverUrl = serverUri.replace(
+                    host: baseUri.host,
+                    port: baseUri.hasPort ? baseUri.port : null,
+                  ).toString();
+                  print("Join: Rewrote localhost server URL to web origin host -> $serverUrl");
+                }
+              }
+            } else {
+              // APK Native - replace with saved default server host if it's not localhost itself
+              final storage = StorageService();
+              final defaultUrl = await storage.getDefaultServerUrl();
+              final defaultUri = Uri.tryParse(defaultUrl);
+              if (defaultUri != null && defaultUri.scheme.startsWith('http')) {
+                final defaultHost = defaultUri.host;
+                final isDefaultLocalhost = defaultHost == 'localhost' || defaultHost == '127.0.0.1' || defaultHost == '10.0.2.2';
+                if (!isDefaultLocalhost) {
+                  serverUrl = serverUri.replace(
+                    host: defaultUri.host,
+                    port: defaultUri.hasPort ? defaultUri.port : null,
+                  ).toString();
+                  print("Join: Rewrote localhost server URL to saved default host -> $serverUrl");
+                }
               }
             }
           }
         }
+      }
+
+      if (serverUrl == null || serverUrl.isEmpty) {
+        throw Exception("Server URL is missing. Make sure your server settings are correct.");
       }
 
       if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
@@ -219,6 +238,12 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hintColor = isDark ? Colors.white54 : Colors.black54;
+    final subHintColor = isDark ? Colors.white30 : Colors.black38;
+    final iconColor = isDark ? Colors.white70 : Colors.black54;
+    final textColor = isDark ? Colors.white : Colors.black87;
+
     return Scaffold(
       backgroundColor: widget.isEmbedded ? Colors.transparent : AppColors.background,
       appBar: widget.isEmbedded
@@ -231,7 +256,7 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
                 IconButton(
                   icon: Icon(
                     _isScanning ? Icons.videocam : Icons.videocam_off,
-                    color: Colors.white,
+                    color: isDark ? Colors.white : Colors.black87,
                   ),
                   onPressed: () {
                     setState(() {
@@ -277,7 +302,7 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
                   Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                        icon: Icon(Icons.arrow_back, color: iconColor),
                         onPressed: widget.onCancel,
                       ),
                       const Text(
@@ -289,7 +314,7 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
                   IconButton(
                     icon: Icon(
                       _isScanning ? Icons.videocam : Icons.videocam_off,
-                      color: Colors.white70,
+                      color: iconColor,
                     ),
                     onPressed: () {
                       setState(() {
@@ -321,19 +346,19 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
                     // Corner marks
                     Positioned(
                       top: 10, left: 10,
-                      child: Container(width: 20, height: 20, decoration: const BoxDecoration(border: Border(top: BorderSide(color: Colors.white, width: 3), left: BorderSide(color: Colors.white, width: 3)))),
+                      child: Container(width: 20, height: 20, decoration: BoxDecoration(border: Border(top: BorderSide(color: AppColors.primary, width: 3), left: BorderSide(color: AppColors.primary, width: 3)))),
                     ),
                     Positioned(
                       top: 10, right: 10,
-                      child: Container(width: 20, height: 20, decoration: const BoxDecoration(border: Border(top: BorderSide(color: Colors.white, width: 3), right: BorderSide(color: Colors.white, width: 3)))),
+                      child: Container(width: 20, height: 20, decoration: BoxDecoration(border: Border(top: BorderSide(color: AppColors.primary, width: 3), right: BorderSide(color: AppColors.primary, width: 3)))),
                     ),
                     Positioned(
                       bottom: 10, left: 10,
-                      child: Container(width: 20, height: 20, decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Colors.white, width: 3), left: BorderSide(color: Colors.white, width: 3)))),
+                      child: Container(width: 20, height: 20, decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.primary, width: 3), left: BorderSide(color: AppColors.primary, width: 3)))),
                     ),
                     Positioned(
                       bottom: 10, right: 10,
-                      child: Container(width: 20, height: 20, decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Colors.white, width: 3), right: BorderSide(color: Colors.white, width: 3)))),
+                      child: Container(width: 20, height: 20, decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.primary, width: 3), right: BorderSide(color: AppColors.primary, width: 3)))),
                     ),
                   ],
                 ),
@@ -355,13 +380,13 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    "Scanner Fallback",
+                    "Connect via Code or Link",
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    "If the camera cannot scan, paste the invite link below:",
-                    style: TextStyle(fontSize: 12, color: Colors.white60),
+                  Text(
+                    "Type the 6/10-character Room ID or paste the invite link below:",
+                    style: TextStyle(fontSize: 12, color: hintColor),
                   ),
                   const SizedBox(height: 16),
                   
@@ -370,9 +395,10 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
                     controller: _linkController,
                     maxLines: 1,
                     enabled: !_isProcessing,
-                    decoration: const InputDecoration(
-                      hintText: "encline://join?room=...",
-                      prefixIcon: Icon(Icons.link, color: Colors.white54),
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: InputDecoration(
+                      hintText: "Invite link or Room Code (e.g. COOLCHATS1)",
+                      prefixIcon: Icon(Icons.vpn_key, color: hintColor),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -400,7 +426,7 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     CircularProgressIndicator(),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     Text(
                       "Connecting and performing X25519 handshake...",
                       style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),

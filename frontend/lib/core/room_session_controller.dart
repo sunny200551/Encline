@@ -144,6 +144,7 @@ class RoomSessionController extends ChangeNotifier {
     required String serverUrl,
     required int roomExpirationMinutes,
     required int messageExpirationMinutes,
+    String? customRoomId,
   }) async {
     try {
       connectedServerUrl = serverUrl;
@@ -169,6 +170,7 @@ class RoomSessionController extends ChangeNotifier {
         x25519PublicKey: myX25519Hex,
         ed25519PublicKey: myEd25519Hex,
         signature: signature,
+        customRoomId: customRoomId,
       );
 
       if (response['success'] == true) {

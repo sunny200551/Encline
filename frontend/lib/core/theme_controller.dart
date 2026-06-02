@@ -7,6 +7,7 @@ class ThemeController extends ChangeNotifier {
   String _currentThemeName = 'techBlue';
 
   String get currentThemeName => _currentThemeName;
+  bool get isLightTheme => _currentThemeName == 'lightCyber';
 
   ThemeController() {
     _loadTheme();

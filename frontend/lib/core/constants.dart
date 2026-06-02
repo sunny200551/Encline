@@ -78,12 +78,24 @@ class AppPalettes {
     accent: Color(0xFF64748B),
   );
 
+  static const ThemePalette lightCyber = ThemePalette(
+    name: 'lightCyber',
+    displayName: 'Light Cyber',
+    background: Color(0xFFF1F5F9),
+    surface: Color(0xFFFFFFFF),
+    surfaceLight: Color(0xFFE2E8F0),
+    primary: Color(0xFF2563EB),
+    secondary: Color(0xFF0D9488),
+    accent: Color(0xFF7C3AED),
+  );
+
   static const List<ThemePalette> all = [
     techBlue,
     nebulaPurple,
     emeraldMatrix,
     sunsetOrange,
     stealthObsidian,
+    lightCyber,
   ];
 
   static ThemePalette getByName(String name) {
@@ -151,27 +163,48 @@ class AppGlow {
 }
 
 class AppTheme {
-  static ThemeData get darkTheme {
+  static ThemeData getTheme(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: brightness,
       scaffoldBackgroundColor: AppColors.background,
-      colorScheme: ColorScheme.dark(
-        primary: AppColors.primary,
-        secondary: AppColors.secondary,
-        surface: AppColors.surface,
-        error: AppColors.error,
-      ),
+      colorScheme: isDark
+          ? ColorScheme.dark(
+              primary: AppColors.primary,
+              secondary: AppColors.secondary,
+              surface: AppColors.surface,
+              error: AppColors.error,
+            )
+          : ColorScheme.light(
+              primary: AppColors.primary,
+              secondary: AppColors.secondary,
+              surface: AppColors.surface,
+              error: AppColors.error,
+            ),
       fontFamily: 'Roboto',
-      textTheme: const TextTheme(
-        headlineLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.white),
-        headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 1.0, color: Colors.white),
-        bodyLarge: TextStyle(fontSize: 16, color: Color(0xFFE2E8F0)),
-        bodyMedium: TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
+      textTheme: TextTheme(
+        headlineLarge: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.5,
+            color: isDark ? Colors.white : Colors.black87),
+        headlineMedium: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.0,
+            color: isDark ? Colors.white : Colors.black87),
+        bodyLarge: TextStyle(
+            fontSize: 16,
+            color: isDark ? const Color(0xFFE2E8F0) : Colors.black87),
+        bodyMedium: TextStyle(
+            fontSize: 14,
+            color: isDark ? const Color(0xFF94A3B8) : Colors.black54),
       ),
       cardTheme: CardThemeData(
         color: AppColors.surface,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(16))),
         elevation: 0,
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -189,8 +222,11 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: AppColors.primary, width: 2),
         ),
-        labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
+        labelStyle: TextStyle(
+            color: isDark ? const Color(0xFF94A3B8) : Colors.black45),
       ),
     );
   }
+
+  static ThemeData get darkTheme => getTheme(Brightness.dark);
 }

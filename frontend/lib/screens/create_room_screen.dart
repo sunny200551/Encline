@@ -29,6 +29,7 @@ class CreateRoomScreen extends StatefulWidget {
 class _CreateRoomScreenState extends State<CreateRoomScreen> {
   final StorageService _storage = StorageService();
   late final TextEditingController _serverController;
+  late final TextEditingController _customCodeController;
   
   // Configurations
   int _roomExpirationIndex = 0;
@@ -40,11 +41,13 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   final List<String> _messageExpirationLabels = ["1 Min", "5 Mins", "10 Mins", "30 Mins", "Never"];
 
   String _inviteLink = "";
+  bool _useCustomCode = false;
 
   @override
   void initState() {
     super.initState();
     _serverController = TextEditingController();
+    _customCodeController = TextEditingController();
     _loadDefaultServer();
   }
 
@@ -70,11 +73,30 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
 
     final controller = Provider.of<RoomSessionController>(context, listen: false);
     
+    String? customId;
+    if (_useCustomCode) {
+      customId = _customCodeController.text.trim().toUpperCase();
+      if (customId.length != 10) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Custom code must be exactly 10 characters")),
+        );
+        return;
+      }
+      final codeRegex = RegExp(r'^[A-Z0-9]{10}$');
+      if (!codeRegex.hasMatch(customId)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Custom code must contain only alphanumeric characters")),
+        );
+        return;
+      }
+    }
+
     // Call controller to create room
     await controller.createRoom(
       serverUrl: serverUrl,
       roomExpirationMinutes: _roomExpirationOptions[_roomExpirationIndex],
       messageExpirationMinutes: _messageExpirationOptions[_messageExpirationIndex],
+      customRoomId: customId,
     );
 
     if (controller.status == SessionStatus.error) {
@@ -100,12 +122,17 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   @override
   void dispose() {
     _serverController.dispose();
+    _customCodeController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = Provider.of<RoomSessionController>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hintColor = isDark ? Colors.white54 : Colors.black54;
+    final subHintColor = isDark ? Colors.white30 : Colors.black38;
+    final iconColor = isDark ? Colors.white70 : Colors.black54;
 
     final isRoomCreated = controller.activeRoom != null &&
         (controller.status == SessionStatus.waitingForPeer ||
@@ -153,7 +180,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.accent.withOpacity(0.04),
+                    color: AppColors.accent.withValues(alpha: 0.04),
                     blurRadius: 100,
                   )
                 ],
@@ -171,7 +198,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                   Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                        icon: Icon(Icons.arrow_back, color: iconColor),
                         onPressed: widget.onCancel,
                       ),
                       const Text(
@@ -188,16 +215,16 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                   const SizedBox(height: 8),
                   TextField(
                     controller: _serverController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: "http://10.0.2.2:3000",
-                      prefixIcon: Icon(Icons.dns, color: Colors.white54),
+                      prefixIcon: Icon(Icons.dns, color: hintColor),
                     ),
                   ),
                   const SizedBox(height: 24),
 
                   // 2. Room Expiration
                   const Text("Room Lifespan", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  const Text("The room will self-destruct after this duration.", style: TextStyle(fontSize: 12, color: Colors.white54)),
+                  Text("The room will self-destruct after this duration.", style: TextStyle(fontSize: 12, color: hintColor)),
                   const SizedBox(height: 12),
                   _buildSegmentedControl(
                     options: _roomExpirationLabels,
@@ -209,7 +236,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
 
                   // 3. Message auto-shred expiration
                   const Text("Message Expiration (Local)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  const Text("Messages will delete from local storage after this duration.", style: TextStyle(fontSize: 12, color: Colors.white54)),
+                  Text("Messages will delete from local storage after this duration.", style: TextStyle(fontSize: 12, color: hintColor)),
                   const SizedBox(height: 12),
                   _buildSegmentedControl(
                     options: _messageExpirationLabels,
@@ -217,6 +244,48 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                     onSelected: (idx) => setState(() => _messageExpirationIndex = idx),
                     selectedColor: AppColors.accent,
                   ),
+                  const SizedBox(height: 24),
+
+                  // 4. Custom Room ID Toggle
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("Personal Connect Code", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Text("Connect distance users without QR/Link sharing", style: TextStyle(fontSize: 12, color: hintColor)),
+                        ],
+                      ),
+                      Switch(
+                        value: _useCustomCode,
+                        activeColor: AppColors.primary,
+                        onChanged: (val) {
+                          setState(() {
+                            _useCustomCode = val;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  if (_useCustomCode) ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _customCodeController,
+                      maxLength: 10,
+                      textCapitalization: TextCapitalization.characters,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
+                      ],
+                      decoration: InputDecoration(
+                        hintText: "ENTER10CHR",
+                        counterText: "",
+                        prefixIcon: Icon(Icons.vpn_key, color: hintColor),
+                        helperText: "Exactly 10 letters or numbers.",
+                        helperStyle: TextStyle(color: subHintColor, fontSize: 11),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 48),
 
                   // Action Trigger
@@ -239,7 +308,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                             ? "Connecting to secure server...\n(Free Render servers take up to 60s to wake up if asleep)"
                             : "Setting up your private room...",
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 12, color: Colors.white70, height: 1.4),
+                        style: TextStyle(fontSize: 12, color: hintColor, height: 1.4),
                       ),
                     ),
                   ],
@@ -284,7 +353,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                         Text(
                           "Share the QR code or link with a peer.\nConnection is secured with X25519 key exchange.",
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.5)),
+                          style: TextStyle(fontSize: 12, color: hintColor),
                         ),
                         const SizedBox(height: 32),
 
@@ -342,11 +411,14 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
     required ValueChanged<int> onSelected,
     required Color selectedColor,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05);
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: borderColor),
       ),
       padding: const EdgeInsets.all(4),
       child: Row(
@@ -366,7 +438,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                   boxShadow: isSelected
                       ? [
                           BoxShadow(
-                            color: selectedColor.withOpacity(0.3),
+                            color: selectedColor.withValues(alpha: 0.3),
                             blurRadius: 8,
                             spreadRadius: -1,
                           )
@@ -379,7 +451,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: isSelected ? Colors.white : Colors.white60,
+                    color: isSelected ? Colors.white : (isDark ? Colors.white60 : Colors.black54),
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                     fontSize: 12,
                   ),

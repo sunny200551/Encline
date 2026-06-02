@@ -110,6 +110,7 @@ class SignalingService {
     required String x25519PublicKey,
     required String ed25519PublicKey,
     String? signature,
+    String? customRoomId,
   }) {
     final completer = Completer<Map<String, dynamic>>();
 
@@ -123,6 +124,7 @@ class SignalingService {
       'x25519PublicKey': x25519PublicKey,
       'ed25519PublicKey': ed25519PublicKey,
       if (signature != null) 'signature': signature,
+      if (customRoomId != null) 'customRoomId': customRoomId,
     };
 
     _socket!.emitWithAck('create-room', config, ack: (response) {
