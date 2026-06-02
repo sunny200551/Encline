@@ -39,7 +39,6 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   final List<int> _messageExpirationOptions = [1, 5, 10, 30, 0]; // in minutes, 0 = off
   final List<String> _messageExpirationLabels = ["1 Min", "5 Mins", "10 Mins", "30 Mins", "Never"];
 
-  bool _isRoomCreated = false;
   String _inviteLink = "";
 
   @override
@@ -78,27 +77,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
       messageExpirationMinutes: _messageExpirationOptions[_messageExpirationIndex],
     );
 
-    if (controller.status == SessionStatus.waitingForPeer && controller.activeRoom != null) {
-      final room = controller.activeRoom!;
-      final encodedServer = Uri.encodeComponent(serverUrl);
-      
-      if (kIsWeb) {
-        final origin = Uri.base.origin;
-        _inviteLink = "$origin/#/join?room=${room.id}&server=$encodedServer&x25519=${room.myX25519PublicKeyHex}&ed25519=${room.myEd25519PublicKeyHex}";
-      } else {
-        final serverUri = Uri.tryParse(serverUrl);
-        if (serverUri != null && serverUri.scheme.startsWith('http')) {
-          final portStr = serverUri.hasPort ? ":${serverUri.port}" : "";
-          _inviteLink = "${serverUri.scheme}://${serverUri.host}$portStr/#/join?room=${room.id}&server=$encodedServer&x25519=${room.myX25519PublicKeyHex}&ed25519=${room.myEd25519PublicKeyHex}";
-        } else {
-          _inviteLink = "encline://join?room=${room.id}&server=$encodedServer&x25519=${room.myX25519PublicKeyHex}&ed25519=${room.myEd25519PublicKeyHex}";
-        }
-      }
-
-      setState(() {
-        _isRoomCreated = true;
-      });
-    } else if (controller.status == SessionStatus.error) {
+    if (controller.status == SessionStatus.error) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(controller.errorMessage ?? "Failed to create room"),
@@ -127,6 +106,30 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = Provider.of<RoomSessionController>(context);
+
+    final isRoomCreated = controller.activeRoom != null &&
+        (controller.status == SessionStatus.waitingForPeer ||
+            controller.status == SessionStatus.negotiatingEncryption ||
+            controller.status == SessionStatus.handshakeComplete);
+
+    if (isRoomCreated && _inviteLink.isEmpty) {
+      final room = controller.activeRoom!;
+      final serverUrl = controller.connectedServerUrl ?? _serverController.text.trim();
+      final encodedServer = Uri.encodeComponent(serverUrl);
+      
+      if (kIsWeb) {
+        final origin = Uri.base.origin;
+        _inviteLink = "$origin/#/join?room=${room.id}&server=$encodedServer&x25519=${room.myX25519PublicKeyHex}&ed25519=${room.myEd25519PublicKeyHex}";
+      } else {
+        final serverUri = Uri.tryParse(serverUrl);
+        if (serverUri != null && serverUri.scheme.startsWith('http')) {
+          final portStr = serverUri.hasPort ? ":${serverUri.port}" : "";
+          _inviteLink = "${serverUri.scheme}://${serverUri.host}$portStr/#/join?room=${room.id}&server=$encodedServer&x25519=${room.myX25519PublicKeyHex}&ed25519=${room.myEd25519PublicKeyHex}";
+        } else {
+          _inviteLink = "encline://join?room=${room.id}&server=$encodedServer&x25519=${room.myX25519PublicKeyHex}&ed25519=${room.myEd25519PublicKeyHex}";
+        }
+      }
+    }
 
     return Scaffold(
       backgroundColor: widget.isEmbedded ? Colors.transparent : AppColors.background,
@@ -179,7 +182,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                   ),
                   const SizedBox(height: 16),
                 ],
-                if (!_isRoomCreated) ...[
+                if (!isRoomCreated) ...[
                   // 1. Server Configuration
                   const Text("Signaling Server", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 8),

@@ -35,6 +35,34 @@ class EncryptionService {
     return await _ed25519.newKeyPair();
   }
 
+  // Extract private key as Hex String
+  Future<String> getPrivateKeyHex(SimpleKeyPair keyPair) async {
+    final keyPairData = await keyPair.extract();
+    return bytesToHex(keyPairData.bytes);
+  }
+
+  // Reconstruct X25519 KeyPair from private key hex and public key hex
+  Future<SimpleKeyPair> reconstructX25519KeyPair(String privateHex, String publicHex) async {
+    final privateBytes = hexToBytes(privateHex);
+    final publicBytes = hexToBytes(publicHex);
+    return SimpleKeyPairData(
+      privateBytes,
+      publicKey: SimplePublicKey(publicBytes, type: KeyPairType.x25519),
+      type: KeyPairType.x25519,
+    );
+  }
+
+  // Reconstruct Ed25519 KeyPair from private key hex and public key hex
+  Future<SimpleKeyPair> reconstructEd25519KeyPair(String privateHex, String publicHex) async {
+    final privateBytes = hexToBytes(privateHex);
+    final publicBytes = hexToBytes(publicHex);
+    return SimpleKeyPairData(
+      privateBytes,
+      publicKey: SimplePublicKey(publicBytes, type: KeyPairType.ed25519),
+      type: KeyPairType.ed25519,
+    );
+  }
+
   // Extract public key bytes from a KeyPair
   Future<Uint8List> getPublicKeyBytes(SimpleKeyPair keyPair) async {
     final pk = await keyPair.extractPublicKey();

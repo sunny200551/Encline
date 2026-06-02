@@ -36,6 +36,7 @@ class RoomSessionController extends ChangeNotifier {
   SessionStatus status = SessionStatus.idle;
   String? errorMessage;
   bool isWebRTCOpen = false;
+  String? connectedServerUrl;
 
   // Verification state
   bool isPeerVerified = false;
@@ -145,6 +146,7 @@ class RoomSessionController extends ChangeNotifier {
     required int messageExpirationMinutes,
   }) async {
     try {
+      connectedServerUrl = serverUrl;
       _updateStatus(SessionStatus.connectingSignaling);
       _signaling.connect(serverUrl);
       
@@ -173,6 +175,9 @@ class RoomSessionController extends ChangeNotifier {
         final roomId = response['roomId'];
         final expirationTime = DateTime.fromMillisecondsSinceEpoch(response['expirationTime']);
         
+        final myX25519PrivHex = await _encryption.getPrivateKeyHex(_myX25519KeyPair!);
+        final myEd25519PrivHex = await _encryption.getPrivateKeyHex(_myEd25519KeyPair!);
+
         activeRoom = Room(
           id: roomId,
           expirationTime: expirationTime,
@@ -180,6 +185,8 @@ class RoomSessionController extends ChangeNotifier {
           isHost: true,
           myX25519PublicKeyHex: myX25519Hex,
           myEd25519PublicKeyHex: myEd25519Hex,
+          myX25519PrivateKeyHex: myX25519PrivHex,
+          myEd25519PrivateKeyHex: myEd25519PrivHex,
         );
 
         messages = [];
@@ -202,6 +209,7 @@ class RoomSessionController extends ChangeNotifier {
     String? expectedEd25519PublicKeyHex,
   }) async {
     try {
+      connectedServerUrl = serverUrl;
       _updateStatus(SessionStatus.connectingSignaling);
       _signaling.connect(serverUrl);
       
@@ -227,6 +235,9 @@ class RoomSessionController extends ChangeNotifier {
         final expirationTime = DateTime.fromMillisecondsSinceEpoch(response['expirationTime']);
         final messageExpirationMinutes = response['messageExpirationMinutes'];
         
+        final myX25519PrivHex = await _encryption.getPrivateKeyHex(_myX25519KeyPair!);
+        final myEd25519PrivHex = await _encryption.getPrivateKeyHex(_myEd25519KeyPair!);
+
         activeRoom = Room(
           id: roomId,
           expirationTime: expirationTime,
@@ -234,6 +245,8 @@ class RoomSessionController extends ChangeNotifier {
           isHost: false,
           myX25519PublicKeyHex: myX25519Hex,
           myEd25519PublicKeyHex: myEd25519Hex,
+          myX25519PrivateKeyHex: myX25519PrivHex,
+          myEd25519PrivateKeyHex: myEd25519PrivHex,
         );
 
         messages = [];
@@ -657,8 +670,29 @@ class RoomSessionController extends ChangeNotifier {
     messages = await _storage.getMessages(room.id);
     status = SessionStatus.handshakeComplete; // Since key is loaded from local storage
     
-    // Note: Re-establishing live WebRTC is not supported for closed rooms, 
-    // but the message logs can be reviewed until expiration.
+    // Reconstruct keypairs from the saved private keys for session recovery
+    if (room.myX25519PrivateKeyHex != null && room.myEd25519PrivateKeyHex != null) {
+      print("Controller: Reconstructing session keypairs for room ${room.id}...");
+      try {
+        _myX25519KeyPair = await _encryption.reconstructX25519KeyPair(
+          room.myX25519PrivateKeyHex!,
+          room.myX25519PublicKeyHex,
+        );
+        _myEd25519KeyPair = await _encryption.reconstructEd25519KeyPair(
+          room.myEd25519PrivateKeyHex!,
+          room.myEd25519PublicKeyHex,
+        );
+      } catch (e) {
+        print("Controller: Error reconstructing keypairs: $e");
+      }
+    }
+
+    final serverUrl = await _storage.getDefaultServerUrl();
+    connectedServerUrl = serverUrl;
+
+    // Connect to signaling server and rejoin room automatically!
+    print("Controller: Re-connecting to signaling server to recover session...");
+    _signaling.connect(serverUrl);
     
     notifyListeners();
   }

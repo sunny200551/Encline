@@ -16,8 +16,9 @@ class Room {
   String? peerX25519PublicKeyHex;
   String? peerEd25519PublicKeyHex;
   
-  // Shared key (computed after handshake)
-  Uint8List? symmetricKey;
+  // Ephemeral private keys for session recovery
+  String? myX25519PrivateKeyHex;
+  String? myEd25519PrivateKeyHex;
 
   Room({
     required this.id,
@@ -29,6 +30,8 @@ class Room {
     this.peerX25519PublicKeyHex,
     this.peerEd25519PublicKeyHex,
     this.symmetricKey,
+    this.myX25519PrivateKeyHex,
+    this.myEd25519PrivateKeyHex,
   });
 
   bool get isSecure => symmetricKey != null;
@@ -50,6 +53,8 @@ class Room {
       'peerX25519PublicKeyHex': peerX25519PublicKeyHex,
       'peerEd25519PublicKeyHex': peerEd25519PublicKeyHex,
       'symmetricKeyHex': symmetricKey != null ? EncryptionService.bytesToHex(symmetricKey!) : null,
+      'myX25519PrivateKeyHex': myX25519PrivateKeyHex,
+      'myEd25519PrivateKeyHex': myEd25519PrivateKeyHex,
     };
   }
 
@@ -67,6 +72,8 @@ class Room {
       symmetricKey: map['symmetricKeyHex'] != null 
           ? EncryptionService.hexToBytes(map['symmetricKeyHex'])
           : null,
+      myX25519PrivateKeyHex: map['myX25519PrivateKeyHex'],
+      myEd25519PrivateKeyHex: map['myEd25519PrivateKeyHex'],
     );
   }
 
