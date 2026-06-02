@@ -19,6 +19,9 @@ class Room {
   // Ephemeral private keys for session recovery
   String? myX25519PrivateKeyHex;
   String? myEd25519PrivateKeyHex;
+  
+  // Shared symmetric key computed after handshake
+  Uint8List? symmetricKey;
 
   Room({
     required this.id,
