@@ -109,7 +109,7 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
         }
       }
 
-      final roomId = params['room'];
+      final roomId = params['room']?.toUpperCase();
       String? serverUrl = params['server'];
       final x25519Key = params['x25519'];
       final ed25519Key = params['ed25519'];

@@ -54,6 +54,7 @@ class RoomSessionController extends ChangeNotifier {
   StreamSubscription? _sigSignalSub;
   StreamSubscription? _sigRelaySub;
   StreamSubscription? _sigRoomDestroyedSub;
+  StreamSubscription? _sigPeerReconnectedSub;
   
   StreamSubscription? _webRTCConnSub;
   StreamSubscription? _webRTCMessageSub;
@@ -105,6 +106,18 @@ class RoomSessionController extends ChangeNotifier {
       if (activeRoom?.id == roomId) {
         _handleRoomTermination("Room expired or was destroyed by peer.");
       }
+    });
+
+    _sigConnSub = _signaling.connectionStream.listen((connected) async {
+      if (connected && activeRoom != null) {
+        print("Controller: Signaling reconnected. Rejoining room ${activeRoom!.id}...");
+        await _rejoinActiveRoom();
+      }
+    });
+
+    _sigPeerReconnectedSub = _signaling.peerReconnectedStream.listen((data) async {
+      print("Controller: Peer reconnected signaling -> ${data['newSocketId']}");
+      await _handlePeerReconnected(data);
     });
   }
 
@@ -277,6 +290,73 @@ class RoomSessionController extends ChangeNotifier {
     } catch (e) {
       _handleError(e.toString());
     }
+  }
+
+  // E2EE Socket Session Reconnection Recovery
+  Future<void> _rejoinActiveRoom() async {
+    if (activeRoom == null) return;
+    try {
+      final myX25519Hex = activeRoom!.myX25519PublicKeyHex;
+      final myEd25519Hex = activeRoom!.myEd25519PublicKeyHex;
+
+      if (_myEd25519KeyPair == null) {
+        print("Controller: Ed25519 KeyPair missing, skipping socket rejoin registration.");
+        return;
+      }
+
+      final signature = await _encryption.signMessage(myX25519Hex, _myEd25519KeyPair!);
+
+      final response = await _signaling.joinRoom(
+        roomId: activeRoom!.id,
+        x25519PublicKey: myX25519Hex,
+        ed25519PublicKey: myEd25519Hex,
+        signature: signature,
+      );
+
+      if (response['success'] == true) {
+        print("Controller: Rejoined room ${activeRoom!.id} successfully.");
+        
+        final peer = response['peer'];
+        if (peer != null) {
+          final peerSocketId = peer['socketId'];
+          final peerX25519Hex = peer['x25519PublicKey'];
+          final peerEd25519Hex = peer['ed25519PublicKey'];
+
+          activeRoom!.peerX25519PublicKeyHex = peerX25519Hex;
+          activeRoom!.peerEd25519PublicKeyHex = peerEd25519Hex;
+
+          // Re-initialize WebRTC connection to peer
+          await _webrtc.initialize(
+            roomId: activeRoom!.id,
+            targetSocketId: peerSocketId,
+            signaling: _signaling,
+            isHost: activeRoom!.isHost,
+          );
+        }
+      } else {
+        print("Controller: Failed to rejoin room: ${response['error']}");
+      }
+    } catch (e) {
+      print("Controller: Error rejoining room: $e");
+    }
+  }
+
+  // Handle other peer reconnecting and shifting WebRTC socket target
+  Future<void> _handlePeerReconnected(Map<String, dynamic> data) async {
+    if (activeRoom == null) return;
+    
+    final newSocketId = data['newSocketId'];
+    _addSystemMessage("Peer reconnected. Re-establishing secure channel...");
+    
+    // Re-initialize WebRTC with the new target socket ID
+    await _webrtc.initialize(
+      roomId: activeRoom!.id,
+      targetSocketId: newSocketId,
+      signaling: _signaling,
+      isHost: activeRoom!.isHost,
+    );
+    
+    notifyListeners();
   }
 
   // Handle Host receiving Client details
@@ -588,6 +668,7 @@ class RoomSessionController extends ChangeNotifier {
     // Cancel stream subscriptions
     _sigConnSub?.cancel();
     _sigPeerJoinedSub?.cancel();
+    _sigPeerReconnectedSub?.cancel();
     _sigPeerLeftSub?.cancel();
     _sigSignalSub?.cancel();
     _sigRelaySub?.cancel();

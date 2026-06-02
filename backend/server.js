@@ -10,6 +10,8 @@ const server = http.createServer(app);
 app.use(express.static(path.join(__dirname, '../frontend/build/web')));
 
 const io = new Server(server, {
+  pingInterval: 10000,
+  pingTimeout: 5000,
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
@@ -124,27 +126,58 @@ io.on('connection', (socket) => {
   // 2. Join Room
   socket.on('join-room', (data, callback) => {
     try {
-      const { roomId, x25519PublicKey, ed25519PublicKey, signature } = data;
+      const { roomId: rawRoomId, x25519PublicKey, ed25519PublicKey, signature } = data;
+      const roomId = rawRoomId ? rawRoomId.toUpperCase() : '';
       const room = rooms[roomId];
 
       if (!room) {
         return callback({ success: false, error: 'Room not found or has expired' });
       }
 
+      // Check if peer is already in room by ed25519 public key (session recovery)
+      const existingPeerIndex = room.peers.findIndex(p => p.ed25519PublicKey === ed25519PublicKey);
+      if (existingPeerIndex !== -1) {
+        const oldSocketId = room.peers[existingPeerIndex].socketId;
+        room.peers[existingPeerIndex].socketId = socket.id;
+        console.log(`Socket ${socket.id} reconnected to Room ${roomId} (old socket: ${oldSocketId})`);
+        
+        socket.join(roomId);
+
+        // Notify the other peer in the room about the new socket ID of this peer
+        const otherPeer = room.peers.find((p, idx) => idx !== existingPeerIndex);
+        if (otherPeer) {
+          io.to(otherPeer.socketId).emit('peer-reconnected', {
+            oldSocketId,
+            newSocketId: socket.id,
+            ed25519PublicKey
+          });
+        }
+
+        return callback({
+          success: true,
+          roomId,
+          expirationTime: room.expirationTime,
+          messageExpirationMinutes: room.messageExpirationMinutes,
+          peer: otherPeer ? {
+            socketId: otherPeer.socketId,
+            x25519PublicKey: otherPeer.x25519PublicKey,
+            ed25519PublicKey: otherPeer.ed25519PublicKey,
+            signature: otherPeer.signature
+          } : null
+        });
+      }
+
       if (room.peers.length >= 2) {
         return callback({ success: false, error: 'Room is full (max 2 peers)' });
       }
 
-      // Check if peer is already in room
-      const existingPeer = room.peers.find(p => p.socketId === socket.id);
-      if (!existingPeer) {
-        room.peers.push({
-          socketId: socket.id,
-          x25519PublicKey,
-          ed25519PublicKey,
-          signature
-        });
-      }
+      // New peer joining
+      room.peers.push({
+        socketId: socket.id,
+        x25519PublicKey,
+        ed25519PublicKey,
+        signature
+      });
 
       socket.join(roomId);
       console.log(`Socket ${socket.id} joined Room ${roomId}`);
@@ -166,7 +199,6 @@ io.on('connection', (socket) => {
         roomId,
         expirationTime: room.expirationTime,
         messageExpirationMinutes: room.messageExpirationMinutes,
-        // Send existing peer info back to joiner
         peer: otherPeer ? {
           socketId: otherPeer.socketId,
           x25519PublicKey: otherPeer.x25519PublicKey,
@@ -182,7 +214,8 @@ io.on('connection', (socket) => {
 
   // 3. WebRTC Signal Relay
   socket.on('signal', (data) => {
-    const { roomId, targetSocketId, signalData } = data;
+    const { roomId: rawRoomId, targetSocketId, signalData } = data;
+    const roomId = rawRoomId ? rawRoomId.toUpperCase() : '';
     const room = rooms[roomId];
 
     if (!room) return;
@@ -199,7 +232,8 @@ io.on('connection', (socket) => {
 
   // 4. Relay Encrypted Message (Fallback if WebRTC data channel fails/NAT block)
   socket.on('relay-message', (data) => {
-    const { roomId, encryptedPayload } = data;
+    const { roomId: rawRoomId, encryptedPayload } = data;
+    const roomId = rawRoomId ? rawRoomId.toUpperCase() : '';
     const room = rooms[roomId];
     if (!room) return;
 
@@ -215,7 +249,8 @@ io.on('connection', (socket) => {
 
   // 5. Explicit Destroy Room
   socket.on('destroy-room', (data) => {
-    const { roomId } = data;
+    const { roomId: rawRoomId } = data;
+    const roomId = rawRoomId ? rawRoomId.toUpperCase() : '';
     const room = rooms[roomId];
     if (!room) return;
 
@@ -236,16 +271,14 @@ io.on('connection', (socket) => {
       const peerIndex = room.peers.findIndex(p => p.socketId === socket.id);
       
       if (peerIndex !== -1) {
-        console.log(`Socket ${socket.id} leaving Room ${roomId}`);
-        room.peers.splice(peerIndex, 1);
-        
+        console.log(`Socket ${socket.id} (peer in Room ${roomId}) disconnected.`);
         // Notify remaining peer that the connection has been broken
-        if (room.peers.length > 0) {
-          io.to(room.id).emit('peer-left', { socketId: socket.id });
-        } else {
-          // If no one is left in the room, destroy it immediately
-          destroyRoom(roomId);
+        const otherPeer = room.peers.find(p => p.socketId !== socket.id);
+        if (otherPeer) {
+          io.to(otherPeer.socketId).emit('peer-left', { socketId: socket.id });
         }
+        // Note: We do NOT remove the peer or destroy the room immediately.
+        // The room will self-destruct naturally at expirationTime.
       }
     }
   });

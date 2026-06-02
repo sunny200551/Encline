@@ -11,6 +11,7 @@ class SignalingService {
   final _signalController = StreamController<Map<String, dynamic>>.broadcast();
   final _relayedMessageController = StreamController<Map<String, dynamic>>.broadcast();
   final _roomDestroyedController = StreamController<String>.broadcast();
+  final _peerReconnectedController = StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<bool> get connectionStream => _connectionController.stream;
   Stream<Map<String, dynamic>> get peerJoinedStream => _peerJoinedController.stream;
@@ -18,6 +19,7 @@ class SignalingService {
   Stream<Map<String, dynamic>> get signalStream => _signalController.stream;
   Stream<Map<String, dynamic>> get relayedMessageStream => _relayedMessageController.stream;
   Stream<String> get roomDestroyedStream => _roomDestroyedController.stream;
+  Stream<Map<String, dynamic>> get peerReconnectedStream => _peerReconnectedController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
   String? get socketId => _socket?.id;
@@ -62,6 +64,12 @@ class SignalingService {
     _socket!.on('peer-left', (data) {
       print("Signaling event: peer-left -> $data");
       _peerLeftController.add(data['socketId']);
+    });
+
+    // Handle peer reconnected event
+    _socket!.on('peer-reconnected', (data) {
+      print("Signaling event: peer-reconnected -> $data");
+      _peerReconnectedController.add(data);
     });
 
     // Handle incoming WebRTC signaling data
@@ -126,7 +134,7 @@ class SignalingService {
     }
 
     final data = {
-      'roomId': roomId,
+      'roomId': roomId.trim().toUpperCase(),
       'x25519PublicKey': x25519PublicKey,
       'ed25519PublicKey': ed25519PublicKey,
       if (signature != null) 'signature': signature,
