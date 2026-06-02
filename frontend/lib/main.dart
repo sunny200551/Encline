@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/constants.dart';
 import 'core/room_session_controller.dart';
+import 'core/theme_controller.dart';
 import 'screens/splash_screen.dart';
 
 void main() {
@@ -16,13 +17,18 @@ class EnclineApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => ThemeController()),
         ChangeNotifierProvider(create: (_) => RoomSessionController()),
       ],
-      child: MaterialApp(
-        title: 'ENCLINE',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.darkTheme,
-        home: const SplashScreen(),
+      child: Consumer<ThemeController>(
+        builder: (context, themeController, _) {
+          return MaterialApp(
+            title: 'ENCLINE',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.darkTheme,
+            home: const SplashScreen(),
+          );
+        },
       ),
     );
   }

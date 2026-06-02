@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
+import 'package:provider/provider.dart';
 import '../core/constants.dart';
 import '../core/storage_service.dart';
+import '../core/theme_controller.dart';
 import '../models/trusted_contact.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/glassmorphic_container.dart';
@@ -289,6 +291,93 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 24),
 
+            // Color Palette Selector
+            const Text(
+              "Theme Accent Color",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            GlassmorphicContainer(
+              padding: const EdgeInsets.all(16),
+              borderRadius: 16,
+              backgroundOpacity: 0.03,
+              child: Consumer<ThemeController>(
+                builder: (context, themeController, _) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Choose a color palette for the interface:",
+                        style: TextStyle(fontSize: 12, color: Colors.white54),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 60,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: AppPalettes.all.length,
+                          itemBuilder: (context, index) {
+                            final palette = AppPalettes.all[index];
+                            final isSelected = themeController.currentThemeName == palette.name;
+                            return GestureDetector(
+                              onTap: () {
+                                themeController.setTheme(palette.name);
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 16),
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: isSelected ? palette.primary : Colors.transparent,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: LinearGradient(
+                                      colors: [palette.primary, palette.secondary],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    boxShadow: isSelected
+                                        ? [
+                                            BoxShadow(
+                                              color: palette.primary.withOpacity(0.4),
+                                              blurRadius: 8,
+                                              spreadRadius: 1,
+                                            )
+                                          ]
+                                        : null,
+                                  ),
+                                  child: isSelected
+                                      ? const Icon(Icons.check, color: Colors.white, size: 20)
+                                      : null,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        "Active Theme: ${AppPalettes.getByName(themeController.currentThemeName).displayName}",
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.secondary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 24),
+
             // Signaling Server Config Section
             const Text(
               "Signaling Server Config",
@@ -354,7 +443,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(height: 4),
                           Text(
                             "v$_appVersion",
-                            style: const TextStyle(fontSize: 12, color: AppColors.secondary, fontWeight: FontWeight.bold),
+                            style: TextStyle(fontSize: 12, color: AppColors.secondary, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -555,7 +644,7 @@ class _CryptoInfoRow extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white70)),
-              Text(value, style: const TextStyle(color: AppColors.secondary, fontSize: 13, fontWeight: FontWeight.bold)),
+              Text(value, style: TextStyle(color: AppColors.secondary, fontSize: 13, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 2),

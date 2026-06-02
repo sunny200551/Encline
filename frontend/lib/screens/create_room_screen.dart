@@ -227,6 +227,19 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                       onPressed: _generateRoom,
                     ),
                   ),
+                  if (controller.status == SessionStatus.connectingSignaling ||
+                      controller.status == SessionStatus.creatingRoom) ...[
+                    const SizedBox(height: 16),
+                    Center(
+                      child: Text(
+                        controller.status == SessionStatus.connectingSignaling
+                            ? "Connecting to secure server...\n(Free Render servers take up to 60s to wake up if asleep)"
+                            : "Setting up your private room...",
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 12, color: Colors.white70, height: 1.4),
+                      ),
+                    ),
+                  ],
                 ] else ...[
                   // Room is created, display QR code and Invite info
                   Center(
@@ -242,7 +255,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                         const SizedBox(height: 4),
                         Text(
                           "Room ID: ${controller.activeRoom!.id}",
-                          style: const TextStyle(fontSize: 16, color: AppColors.secondary, fontWeight: FontWeight.bold, letterSpacing: 1),
+                          style: TextStyle(fontSize: 16, color: AppColors.secondary, fontWeight: FontWeight.bold, letterSpacing: 1),
                         ),
                         const SizedBox(height: 32),
 
@@ -280,10 +293,10 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                                 style: OutlinedButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(vertical: 14),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  side: const BorderSide(color: AppColors.primary),
+                                  side: BorderSide(color: AppColors.primary),
                                 ),
-                                icon: const Icon(Icons.copy, color: AppColors.primary),
-                                label: const Text("Copy Link", style: TextStyle(color: AppColors.primary)),
+                                icon: Icon(Icons.copy, color: AppColors.primary),
+                                label: Text("Copy Link", style: TextStyle(color: AppColors.primary)),
                                 onPressed: _copyInviteLink,
                               ),
                             ),

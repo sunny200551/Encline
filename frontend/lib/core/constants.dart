@@ -5,15 +5,15 @@ class AppColors {
   static const Color background = Color(0xFF080C14);
   static const Color surface = Color(0xFF0F172A);
   static const Color surfaceLight = Color(0xFF1E293B);
-  
+
   // Vibrant accents
-  static const Color primary = Color(0xFF3B82F6);      // Tech Blue
-  static const Color secondary = Color(0xFF06B6D4);    // Cyber Cyan
-  static const Color accent = Color(0xFF8B5CF6);       // Nebula Purple
-  static const Color success = Color(0xFF10B981);      // Emerald Green
-  static const Color warning = Color(0xFFF59E0B);      // Warning Gold
-  static const Color error = Color(0xFFEF4444);        // Neon Red
-  
+  static const Color primary = Color(0xFF3B82F6); // Tech Blue
+  static const Color secondary = Color(0xFF06B6D4); // Cyber Cyan
+  static const Color accent = Color(0xFF8B5CF6); // Nebula Purple
+  static const Color success = Color(0xFF10B981); // Emerald Green
+  static const Color warning = Color(0xFFF59E0B); // Warning Gold
+  static const Color error = Color(0xFFEF4444); // Neon Red
+
   // Gradients
   static const LinearGradient primaryGradient = LinearGradient(
     colors: [primary, secondary],
@@ -43,7 +43,7 @@ class AppColors {
 class AppGlow {
   static List<BoxShadow> primaryGlow = [
     BoxShadow(
-      color: AppColors.primary.withOpacity(0.3),
+      color: AppColors.primary.withValues(alpha: 0.3),
       blurRadius: 16,
       spreadRadius: -2,
     ),
@@ -51,7 +51,7 @@ class AppGlow {
 
   static List<BoxShadow> accentGlow = [
     BoxShadow(
-      color: AppColors.accent.withOpacity(0.3),
+      color: AppColors.accent.withValues(alpha: 0.3),
       blurRadius: 16,
       spreadRadius: -2,
     ),
@@ -72,14 +72,26 @@ class AppTheme {
       ),
       fontFamily: 'Roboto', // Default fallback, but using styled text
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.white),
-        headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 1.0, color: Colors.white),
+        headlineLarge: TextStyle(
+          fontSize: 32,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.5,
+          color: Colors.white,
+        ),
+        headlineMedium: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.0,
+          color: Colors.white,
+        ),
         bodyLarge: TextStyle(fontSize: 16, color: Color(0xFFE2E8F0)),
         bodyMedium: TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
       ),
       cardTheme: const CardThemeData(
         color: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+        ),
         elevation: 0,
       ),
       inputDecorationTheme: InputDecorationTheme(

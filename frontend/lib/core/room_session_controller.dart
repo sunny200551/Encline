@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:cryptography/cryptography.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'encryption_service.dart';
 import 'signaling_service.dart';
@@ -510,7 +511,25 @@ class RoomSessionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Helper: Waiting for Socket io connection
+  // Pre-warm the server to wake it up early on startup (handling Render cold start)
+  Future<void> preWarmServer(String serverUrl) async {
+    try {
+      print("Pre-warming signaling server at: $serverUrl");
+      final uri = Uri.parse("$serverUrl/health");
+      final client = http.Client();
+      client.get(uri).timeout(const Duration(seconds: 15)).then((_) {
+        print("Pre-warm request succeeded, server is active.");
+        client.close();
+      }).catchError((e) {
+        print("Pre-warm request error (expected if booting/slow): $e");
+        client.close();
+      });
+    } catch (e) {
+      print("Pre-warm call error: $e");
+    }
+  }
+
+  // Helper: Waiting for Socket io connection (90 seconds timeout for Render cold starts)
   Future<void> _waitForSignalingConnection() {
     final completer = Completer<void>();
     if (_signaling.isConnected) {
@@ -526,11 +545,11 @@ class RoomSessionController extends ChangeNotifier {
       }
     });
 
-    // Timeout after 8 seconds
-    Future.delayed(const Duration(seconds: 8), () {
+    // Timeout after 90 seconds (generous threshold to survive Render spin-up cold start)
+    Future.delayed(const Duration(seconds: 90), () {
       sub?.cancel();
       if (!completer.isCompleted) {
-        completer.completeError(TimeoutException("Signaling connection timed out"));
+        completer.completeError(TimeoutException("Signaling connection timed out after 90 seconds. The server might be booting up; please try again shortly."));
       }
     });
 

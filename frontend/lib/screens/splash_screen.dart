@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../core/constants.dart';
+import '../core/room_session_controller.dart';
 import '../core/storage_service.dart';
 import 'onboarding_screen.dart';
 import 'home_screen.dart';
@@ -39,6 +41,12 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   }
 
   Future<void> _navigateToNext() async {
+    // Fire off the pre-warm call to wake the Render server early on app start
+    final defaultServer = await _storage.getDefaultServerUrl();
+    if (mounted) {
+      Provider.of<RoomSessionController>(context, listen: false).preWarmServer(defaultServer);
+    }
+
     await Future.delayed(const Duration(milliseconds: 3000));
     if (!mounted) return;
 

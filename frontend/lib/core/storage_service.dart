@@ -37,7 +37,7 @@ class StorageService {
     if (savedUrl != null && savedUrl.isNotEmpty) {
       return savedUrl;
     }
-    return kIsWeb ? "http://localhost:3000" : "http://10.0.2.2:3000";
+    return "https://encline-backend.onrender.com";
   }
 
   Future<void> setDefaultServerUrl(String url) async {
