@@ -237,6 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final double width = MediaQuery.of(context).size.width;
     final bool isDesktop = width >= 720;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     final controller = context.watch<RoomSessionController>();
 
