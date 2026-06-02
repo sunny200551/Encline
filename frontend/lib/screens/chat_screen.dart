@@ -219,7 +219,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           
           // Input field bar
-          _buildInputFieldBar(),
+          _buildInputFieldBar(controller),
         ],
       ),
     );
@@ -506,7 +506,11 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildInputFieldBar() {
+  Widget _buildInputFieldBar(RoomSessionController controller) {
+    final room = controller.activeRoom;
+    final isConnected = room != null && room.symmetricKey != null;
+    final hint = isConnected ? "Type a message" : "Waiting for secure connection...";
+
     return Container(
       color: const Color(0xFF202c33), // WhatsApp Input bar color
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -518,11 +522,12 @@ class _ChatScreenState extends State<ChatScreen> {
               child: TextField(
                 controller: _messageController,
                 maxLines: null,
+                enabled: isConnected,
                 keyboardType: TextInputType.multiline,
-                style: const TextStyle(color: Colors.white, fontSize: 14.5),
+                style: TextStyle(color: isConnected ? Colors.white : Colors.white30, fontSize: 14.5),
                 decoration: InputDecoration(
-                  hintText: "Type a message",
-                  hintStyle: const TextStyle(color: Colors.white24, fontSize: 14.5),
+                  hintText: hint,
+                  hintStyle: TextStyle(color: isConnected ? Colors.white24 : Colors.white10, fontSize: 14.5),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                   filled: true,
                   fillColor: const Color(0xFF2a3942), // WhatsApp input background
@@ -531,17 +536,17 @@ class _ChatScreenState extends State<ChatScreen> {
                     borderSide: BorderSide.none,
                   ),
                 ),
-                onSubmitted: (_) => _sendMessage(),
+                onSubmitted: isConnected ? (_) => _sendMessage() : null,
               ),
             ),
           ),
           const SizedBox(width: 8),
           CircleAvatar(
             radius: 20,
-            backgroundColor: const Color(0xFF00a884), // WhatsApp green send button
+            backgroundColor: isConnected ? const Color(0xFF00a884) : const Color(0xFF2a3942), // WhatsApp green send button
             child: IconButton(
-              icon: const Icon(Icons.send, color: Colors.white, size: 16),
-              onPressed: _sendMessage,
+              icon: Icon(Icons.send, color: isConnected ? Colors.white : Colors.white30, size: 16),
+              onPressed: isConnected ? _sendMessage : null,
             ),
           ),
         ],

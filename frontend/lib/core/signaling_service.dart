@@ -57,35 +57,47 @@ class SignalingService {
     // Handle peer joined event
     _socket!.on('peer-joined', (data) {
       print("Signaling event: peer-joined -> $data");
-      _peerJoinedController.add(data);
+      if (data != null) {
+        _peerJoinedController.add(Map<String, dynamic>.from(data));
+      }
     });
 
     // Handle peer left event
     _socket!.on('peer-left', (data) {
       print("Signaling event: peer-left -> $data");
-      _peerLeftController.add(data['socketId']);
+      if (data != null) {
+        _peerLeftController.add(data['socketId']?.toString() ?? '');
+      }
     });
 
     // Handle peer reconnected event
     _socket!.on('peer-reconnected', (data) {
       print("Signaling event: peer-reconnected -> $data");
-      _peerReconnectedController.add(data);
+      if (data != null) {
+        _peerReconnectedController.add(Map<String, dynamic>.from(data));
+      }
     });
 
     // Handle incoming WebRTC signaling data
     _socket!.on('signal', (data) {
-      _signalController.add(data);
+      if (data != null) {
+        _signalController.add(Map<String, dynamic>.from(data));
+      }
     });
 
     // Handle incoming relayed encrypted message
     _socket!.on('relayed-message', (data) {
-      _relayedMessageController.add(data);
+      if (data != null) {
+        _relayedMessageController.add(Map<String, dynamic>.from(data));
+      }
     });
 
     // Handle room destroyed event
     _socket!.on('room-destroyed', (data) {
       print("Signaling event: room-destroyed -> $data");
-      _roomDestroyedController.add(data['roomId']);
+      if (data != null) {
+        _roomDestroyedController.add(data['roomId']?.toString() ?? '');
+      }
     });
 
     _socket!.connect();

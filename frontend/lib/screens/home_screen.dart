@@ -241,7 +241,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final controller = context.watch<RoomSessionController>();
 
     // Dynamic split screen router
-    if (isDesktop && controller.activeRoom != null && controller.status != SessionStatus.disconnected) {
+    if (isDesktop &&
+        controller.activeRoom != null &&
+        controller.status != SessionStatus.disconnected &&
+        controller.status != SessionStatus.waitingForPeer &&
+        controller.status != SessionStatus.creatingRoom &&
+        controller.status != SessionStatus.connectingSignaling) {
       if (_desktopView != 'chat') {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           setState(() {
