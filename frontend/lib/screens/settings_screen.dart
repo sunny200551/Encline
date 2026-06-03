@@ -114,7 +114,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // Query version from server
       final uri = Uri.parse("$serverUrl/version");
-      final response = await http.get(uri).timeout(const Duration(seconds: 5));
+      final response = await http.get(uri).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

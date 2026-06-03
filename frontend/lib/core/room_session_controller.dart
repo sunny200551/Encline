@@ -158,7 +158,7 @@ class RoomSessionController extends ChangeNotifier {
       
       // Generate temporary keypairs
       _myX25519KeyPair = await _encryption.generateX25519KeyPair();
-      _myEd25519KeyPair = await _encryption.generateEd25519KeyPair();
+      _myEd25519KeyPair = await _getOrCreateMyEd25519KeyPair();
       
       final myX25519Hex = await _encryption.getPublicKeyHex(_myX25519KeyPair!);
       final myEd25519Hex = await _encryption.getPublicKeyHex(_myEd25519KeyPair!);
@@ -220,7 +220,7 @@ class RoomSessionController extends ChangeNotifier {
       _updateStatus(SessionStatus.joiningRoom);
       
       _myX25519KeyPair = await _encryption.generateX25519KeyPair();
-      _myEd25519KeyPair = await _encryption.generateEd25519KeyPair();
+      _myEd25519KeyPair = await _getOrCreateMyEd25519KeyPair();
       
       final myX25519Hex = await _encryption.getPublicKeyHex(_myX25519KeyPair!);
       final myEd25519Hex = await _encryption.getPublicKeyHex(_myEd25519KeyPair!);
@@ -415,6 +415,25 @@ class RoomSessionController extends ChangeNotifier {
     } catch (e) {
       _handleError("Handshake failure: ${e.toString()}");
     }
+  }
+
+  Future<SimpleKeyPair> _getOrCreateMyEd25519KeyPair() async {
+    final privHex = await _storage.getMyEd25519PrivateKeyHex();
+    final pubHex = await _storage.getMyEd25519PublicKeyHex();
+    if (privHex != null && pubHex != null && privHex.isNotEmpty && pubHex.isNotEmpty) {
+      try {
+        return await _encryption.reconstructEd25519KeyPair(privHex, pubHex);
+      } catch (e) {
+        print("Error reconstructing saved identity key: $e");
+      }
+    }
+    
+    // Generate new persistent identity key
+    final keyPair = await _encryption.generateEd25519KeyPair();
+    final newPrivHex = await _encryption.getPrivateKeyHex(keyPair);
+    final newPubHex = await _encryption.getPublicKeyHex(keyPair);
+    await _storage.saveMyEd25519Keys(newPrivHex, newPubHex);
+    return keyPair;
   }
 
   // Cryptographically verify peer signatures and check against trusted pinned contacts

@@ -14,6 +14,8 @@ class StorageService {
   static const String _themeModeKey = 'encline_theme_mode';
   static const String _serverUrlKey = 'encline_server_url';
   static const String _contactsKey = 'encline_trusted_contacts';
+  static const String _myPrivateKeyKey = 'encline_my_ed25519_private_key';
+  static const String _myPublicKeyKey = 'encline_my_ed25519_public_key';
 
   // Helper to get local storage directory
   Future<Directory> get _localDirectory async {
@@ -71,6 +73,22 @@ class StorageService {
   Future<void> setDarkMode(bool dark) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_themeModeKey, dark);
+  }
+
+  Future<String?> getMyEd25519PrivateKeyHex() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_myPrivateKeyKey);
+  }
+
+  Future<String?> getMyEd25519PublicKeyHex() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_myPublicKeyKey);
+  }
+
+  Future<void> saveMyEd25519Keys(String privateHex, String publicHex) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_myPrivateKeyKey, privateHex);
+    await prefs.setString(_myPublicKeyKey, publicHex);
   }
 
   // 1.5 Trusted Contacts Management
