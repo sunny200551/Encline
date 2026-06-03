@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/constants.dart';
+import '../core/theme_controller.dart';
 import '../core/room_session_controller.dart';
 import '../core/storage_service.dart';
 import 'onboarding_screen.dart';
@@ -72,6 +73,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeController>();
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(

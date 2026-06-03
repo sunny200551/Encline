@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/constants.dart';
+import '../core/theme_controller.dart';
 import '../core/storage_service.dart';
 import '../core/room_session_controller.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/glassmorphic_container.dart';
+import '../widgets/identicon.dart';
 import '../models/room.dart';
 import '../models/trusted_contact.dart';
 import 'create_room_screen.dart';
@@ -235,6 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeController>();
     final double width = MediaQuery.of(context).size.width;
     final bool isDesktop = width >= 720;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
@@ -654,14 +657,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-            leading: CircleAvatar(
-              backgroundColor: AppColors.success.withValues(alpha: 0.15),
-              radius: 18,
-              child: const Icon(
-                Icons.verified_outlined,
-                color: AppColors.success,
-                size: 18,
-              ),
+            leading: IdenticonWidget(
+              publicKeyHex: contact.ed25519PublicKeyHex,
+              size: 36,
             ),
             title: Text(
               contact.nickname,

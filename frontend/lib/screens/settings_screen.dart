@@ -10,6 +10,7 @@ import '../core/theme_controller.dart';
 import '../models/trusted_contact.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/glassmorphic_container.dart';
+import '../widgets/identicon.dart';
 
 class SettingsScreen extends StatefulWidget {
   final bool isEmbedded;
@@ -246,6 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeController>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final hintColor = isDark ? Colors.white54 : Colors.black54;
     final subHintColor = isDark ? Colors.white30 : Colors.black38;
@@ -283,112 +285,213 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 16),
             ],
-            // Theme settings Card
-            Consumer<ThemeController>(
-              builder: (context, themeController, _) {
-                return GlassmorphicContainer(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  borderRadius: 16,
-                  backgroundOpacity: 0.03,
-                  child: SwitchListTile(
-                    value: !themeController.isLightTheme,
-                    onChanged: (isDarkTheme) {
-                      themeController.setTheme(isDarkTheme ? 'techBlue' : 'lightCyber');
-                    },
-                    title: const Text("Dark Mode"),
-                    subtitle: Text("Toggle between premium dark and light theme styles", style: TextStyle(color: hintColor, fontSize: 12)),
-                    activeThumbColor: AppColors.primary,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                );
-              }
-            ),
-            const SizedBox(height: 24),
-
-            // Color Palette Selector
+            // Premium Visual Theme Preview Cards
             const Text(
-              "Theme Accent Color",
+              "Visual Theme Palette",
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-            GlassmorphicContainer(
-              padding: const EdgeInsets.all(16),
-              borderRadius: 16,
-              backgroundOpacity: 0.03,
-              child: Consumer<ThemeController>(
-                builder: (context, themeController, _) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Choose a color palette for the interface:",
-                        style: TextStyle(fontSize: 12, color: hintColor),
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        height: 60,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: AppPalettes.all.length,
-                          itemBuilder: (context, index) {
-                            final palette = AppPalettes.all[index];
-                            final isSelected = themeController.currentThemeName == palette.name;
-                            return GestureDetector(
-                              onTap: () {
-                                themeController.setTheme(palette.name);
-                              },
-                              child: Container(
-                                margin: const EdgeInsets.only(right: 16),
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: isSelected ? palette.primary : Colors.transparent,
-                                    width: 2,
-                                  ),
+            Consumer<ThemeController>(
+              builder: (context, themeController, _) {
+                return SizedBox(
+                  height: 200,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: AppPalettes.all.length,
+                    itemBuilder: (context, index) {
+                      final palette = AppPalettes.all[index];
+                      final isSelected = themeController.currentThemeName == palette.name;
+                      final isPaletteDark = palette.name != 'lightCyber';
+
+                      return GestureDetector(
+                        onTap: () {
+                          themeController.setTheme(palette.name);
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          width: 140,
+                          margin: const EdgeInsets.only(right: 16),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isSelected ? palette.primary : (isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08)),
+                              width: isSelected ? 2.5 : 1.0,
+                            ),
+                            boxShadow: isSelected
+                                ? [
+                                    BoxShadow(
+                                      color: palette.primary.withOpacity(0.25),
+                                      blurRadius: 10,
+                                      spreadRadius: 1,
+                                    )
+                                  ]
+                                : null,
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Stack(
+                              children: [
+                                // Mockup Background
+                                Container(
+                                  color: palette.background,
                                 ),
-                                child: Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: LinearGradient(
-                                      colors: [palette.primary, palette.secondary],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
+                                // Mockup Surface Card
+                                Positioned(
+                                  top: 36,
+                                  left: 8,
+                                  right: 8,
+                                  bottom: 8,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: palette.surface,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: palette.surfaceLight, width: 0.5),
                                     ),
-                                    boxShadow: isSelected
-                                        ? [
-                                            BoxShadow(
-                                              color: palette.primary.withValues(alpha: 0.4),
-                                              blurRadius: 8,
-                                              spreadRadius: 1,
-                                            )
-                                          ]
-                                        : null,
+                                    padding: const EdgeInsets.all(6),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        // Miniature chat sent
+                                        Align(
+                                          alignment: Alignment.centerRight,
+                                          child: Container(
+                                            width: 45,
+                                            height: 12,
+                                            decoration: BoxDecoration(
+                                              color: palette.primary,
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        // Miniature chat received
+                                        Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Container(
+                                            width: 55,
+                                            height: 12,
+                                            decoration: BoxDecoration(
+                                              color: palette.surfaceLight,
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        // Dots showing primary, secondary, accent colors
+                                        Row(
+                                          children: [
+                                            Container(
+                                              width: 10,
+                                              height: 10,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                color: palette.primary,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Container(
+                                              width: 10,
+                                              height: 10,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                color: palette.secondary,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Container(
+                                              width: 10,
+                                              height: 10,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                color: palette.accent,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  child: isSelected
-                                      ? const Icon(Icons.check, color: Colors.white, size: 20)
-                                      : null,
                                 ),
-                              ),
-                            );
-                          },
+                                // Mockup Header
+                                Positioned(
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  height: 30,
+                                  child: Container(
+                                    color: palette.surface,
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    child: Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 6,
+                                          backgroundColor: palette.secondary.withOpacity(0.2),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Container(
+                                          width: 40,
+                                          height: 4,
+                                          color: isPaletteDark ? Colors.white24 : Colors.black26,
+                                        ),
+                                        const Spacer(),
+                                        Icon(
+                                          Icons.verified_user,
+                                          size: 8,
+                                          color: palette.primary,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                // Selection overlay name banner
+                                Positioned(
+                                  bottom: 8,
+                                  left: 8,
+                                  right: 8,
+                                  height: 24,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: isPaletteDark ? Colors.black50 : Colors.white70,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      palette.displayName,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: isPaletteDark ? Colors.white70 : Colors.black87,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Selection Checkmark Glow
+                                if (isSelected)
+                                  Positioned(
+                                    top: 6,
+                                    right: 6,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: BoxDecoration(
+                                        color: palette.primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.check,
+                                        color: Colors.white,
+                                        size: 10,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        "Active Theme: ${AppPalettes.getByName(themeController.currentThemeName).displayName}",
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.secondary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
+                      );
+                    },
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 24),
 
@@ -599,6 +702,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     itemBuilder: (context, index) {
                       final c = contacts[index];
                       return ListTile(
+                        leading: IdenticonWidget(
+                          publicKeyHex: c.ed25519PublicKeyHex,
+                          size: 36,
+                        ),
                         title: Text(c.nickname, style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(
                           "Ed25519 Key: ${c.ed25519PublicKeyHex.substring(0, 8)}...${c.ed25519PublicKeyHex.substring(c.ed25519PublicKeyHex.length - 8)}",

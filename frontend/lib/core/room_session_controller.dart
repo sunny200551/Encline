@@ -37,6 +37,7 @@ class RoomSessionController extends ChangeNotifier {
   String? errorMessage;
   bool isWebRTCOpen = false;
   String? connectedServerUrl;
+  int? latency;
 
   // Verification state
   bool isPeerVerified = false;
@@ -555,6 +556,24 @@ class RoomSessionController extends ChangeNotifier {
         activeRoom!.symmetricKey!,
       );
 
+      // Intercept cryptographic silent ping frames
+      if (decryptedText.startsWith('__ping__:')) {
+        final timestampStr = decryptedText.substring(9);
+        await _sendPong(timestampStr);
+        return;
+      }
+
+      // Intercept cryptographic silent pong frames
+      if (decryptedText.startsWith('__pong__:')) {
+        final timestampStr = decryptedText.substring(9);
+        final sentTimeMs = int.tryParse(timestampStr) ?? 0;
+        if (sentTimeMs > 0) {
+          latency = DateTime.now().millisecondsSinceEpoch - sentTimeMs;
+          notifyListeners();
+        }
+        return;
+      }
+
       final message = Message(
         id: const Uuid().v4(),
         roomId: activeRoom!.id,
@@ -568,6 +587,43 @@ class RoomSessionController extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       print("Failed to decrypt incoming packet: $e");
+    }
+  }
+
+  // Send silent latency check ping frame
+  Future<void> sendPing() async {
+    if (activeRoom == null || activeRoom!.symmetricKey == null) return;
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    await _sendSilentPayload('__ping__:$timestamp');
+  }
+
+  // Send silent latency check pong response
+  Future<void> _sendPong(String timestampStr) async {
+    await _sendSilentPayload('__pong__:$timestampStr');
+  }
+
+  // Helper to encrypt and transmit silent frame via WebRTC or socket relay
+  Future<void> _sendSilentPayload(String text) async {
+    if (activeRoom == null || activeRoom!.symmetricKey == null) return;
+    try {
+      final encryptedPayload = await _encryption.encryptChaCha20Poly1305(
+        text, 
+        activeRoom!.symmetricKey!,
+      );
+
+      bool sentWebRTC = false;
+      if (isWebRTCOpen) {
+        sentWebRTC = await _webrtc.sendData(encryptedPayload);
+      }
+
+      if (!sentWebRTC) {
+        _signaling.sendRelayedMessage(
+          roomId: activeRoom!.id,
+          encryptedPayload: encryptedPayload,
+        );
+      }
+    } catch (e) {
+      print("Controller: Failed to transmit silent frame: $e");
     }
   }
 
@@ -606,6 +662,7 @@ class RoomSessionController extends ChangeNotifier {
     _webrtc.close();
     _signaling.disconnect();
     isWebRTCOpen = false;
+    latency = null;
     
     if (roomId != null) {
       // Secure shred message logs

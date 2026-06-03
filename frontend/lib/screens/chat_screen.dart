@@ -2,9 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/constants.dart';
+import '../core/theme_controller.dart';
 import '../core/room_session_controller.dart';
 import '../models/message.dart';
 import '../widgets/glassmorphic_container.dart';
+import '../widgets/identicon.dart';
 
 class ChatScreen extends StatefulWidget {
   final bool isEmbedded;
@@ -21,9 +23,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Timer? _countdownTimer;
   Timer? _msgExpirationTimer;
+  Timer? _pingTimer;
   String _timeRemainingStr = "00:00";
   bool _showTrustForm = false;
   bool _hasPopped = false;
+  bool _showWebRTCHUD = false;
 
   @override
   void initState() {
@@ -70,6 +74,16 @@ class _ChatScreenState extends State<ChatScreen> {
         _checkMessageExpiration(controller, room.messageExpirationMinutes);
       });
     }
+
+    // 3. Cryptographic ping/pong timer
+    _pingTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      if (mounted) {
+        final ctrl = Provider.of<RoomSessionController>(context, listen: false);
+        if (ctrl.activeRoom != null && ctrl.activeRoom!.symmetricKey != null) {
+          ctrl.sendPing();
+        }
+      }
+    });
   }
 
   void _checkMessageExpiration(
@@ -184,14 +198,15 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _countdownTimer?.cancel();
     _msgExpirationTimer?.cancel();
+    _pingTimer?.cancel();
     _messageController.dispose();
     _nameController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  @override
   Widget build(BuildContext context) {
+    context.watch<ThemeController>();
     final controller = Provider.of<RoomSessionController>(context);
     final room = controller.activeRoom;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -230,6 +245,9 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           // Header Bar
           _buildHeader(displayName, controller),
+
+          // WebRTC Status HUD
+          if (_showWebRTCHUD && room != null) _buildWebRTCHUD(controller),
 
           // Security Banners
           if (controller.isKeyMismatch) _buildKeyMismatchBanner(),
@@ -319,15 +337,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 Navigator.of(context).pop();
               },
             ),
-          CircleAvatar(
-            backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-            radius: 20,
-            child: Icon(
-              Icons.person,
-              color: controller.isPeerVerified
-                  ? AppColors.primary
-                  : (isDark ? Colors.white54 : Colors.black45),
-            ),
+          IdenticonWidget(
+            publicKeyHex: controller.activeRoom?.peerEd25519PublicKeyHex ?? '',
+            size: 40,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -355,30 +367,46 @@ class _ChatScreenState extends State<ChatScreen> {
                   ],
                 ),
                 const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Icon(
-                      controller.isWebRTCOpen
-                          ? Icons.shield
-                          : Icons.lock_outline,
-                      color: controller.isWebRTCOpen
-                          ? AppColors.primary
-                          : subtextColor,
-                      size: 11,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      controller.isWebRTCOpen
-                          ? "WebRTC Direct Channel"
-                          : "Handshake Encrypted Link",
-                      style: TextStyle(
-                        fontSize: 10,
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _showWebRTCHUD = !_showWebRTCHUD;
+                    });
+                  },
+                  child: Row(
+                    children: [
+                      Icon(
+                        controller.isWebRTCOpen
+                            ? Icons.shield
+                            : Icons.lock_outline,
                         color: controller.isWebRTCOpen
                             ? AppColors.primary
                             : subtextColor,
+                        size: 11,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 4),
+                      Text(
+                        controller.isWebRTCOpen
+                            ? "WebRTC Direct Channel"
+                            : "Handshake Encrypted Link",
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: controller.isWebRTCOpen
+                              ? AppColors.primary
+                              : subtextColor,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(
+                        _showWebRTCHUD ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                        color: controller.isWebRTCOpen
+                            ? AppColors.primary
+                            : subtextColor,
+                        size: 12,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -417,6 +445,150 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildWebRTCHUD(RoomSessionController controller) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final labelColor = isDark ? Colors.white38 : Colors.black45;
+    final rtt = controller.latency;
+    
+    String latencyStr = "Measuring...";
+    Color latencyColor = AppColors.secondary;
+    if (rtt != null) {
+      latencyStr = "$rtt ms";
+      if (rtt < 100) {
+        latencyColor = AppColors.success;
+      } else if (rtt < 250) {
+        latencyColor = AppColors.warning;
+      } else {
+        latencyColor = AppColors.error;
+      }
+    }
+
+    final pathStr = controller.isWebRTCOpen
+        ? "P2P Direct (WebRTC Data Channel)"
+        : "Relayed Link (Signaling Socket Server)";
+    final pathColor = controller.isWebRTCOpen ? AppColors.success : AppColors.warning;
+
+    final myX25519 = controller.activeRoom?.myX25519PublicKeyHex ?? "Unknown";
+    final peerX25519 = controller.activeRoom?.peerX25519PublicKeyHex ?? "Negotiating...";
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          bottom: BorderSide(color: AppColors.surfaceLight, width: 0.5),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                "P2P Connection Telemetry",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5),
+              ),
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _showWebRTCHUD = false;
+                  });
+                },
+                child: Icon(Icons.expand_less, size: 18, color: labelColor),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildHUDItem(
+                  "Connection Latency",
+                  latencyStr,
+                  valueColor: latencyColor,
+                ),
+              ),
+              Expanded(
+                child: _buildHUDItem(
+                  "Transmission Path",
+                  pathStr,
+                  valueColor: pathColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildHUDItem(
+                  "Local DH Key (X25519)",
+                  myX25519.length > 16
+                      ? "${myX25519.substring(0, 8)}...${myX25519.substring(myX25519.length - 8)}"
+                      : myX25519,
+                ),
+              ),
+              Expanded(
+                child: _buildHUDItem(
+                  "Peer DH Key (X25519)",
+                  peerX25519.length > 16
+                      ? "${peerX25519.substring(0, 8)}...${peerX25519.substring(peerX25519.length - 8)}"
+                      : peerX25519,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Divider(height: 16, color: Colors.white10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Encryption Scheme: ChaCha20-Poly1305 (256-bit AEAD)",
+                style: TextStyle(fontSize: 10, color: labelColor),
+              ),
+              Text(
+                "Verification Signature: Ed25519",
+                style: TextStyle(fontSize: 10, color: labelColor),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHUDItem(String label, String value, {Color? valueColor}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: isDark ? Colors.white38 : Colors.black45,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: valueColor ?? (isDark ? Colors.white70 : Colors.black87),
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
     );
   }
 

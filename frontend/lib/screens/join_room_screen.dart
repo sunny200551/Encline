@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../core/constants.dart';
+import '../core/theme_controller.dart';
 import '../core/room_session_controller.dart';
 import '../core/storage_service.dart';
 import '../widgets/gradient_button.dart';
@@ -31,6 +32,7 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
   final MobileScannerController _scannerController = MobileScannerController(
     detectionSpeed: DetectionSpeed.normal,
     facing: CameraFacing.back,
+    autoStart: false,
   );
   
   bool _isProcessing = false;
@@ -45,8 +47,28 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
         _processInviteLink(widget.initialInviteLink!);
       });
     }
-    if (!kIsWeb) {
+    if (kIsWeb) {
+      _scannerController.start();
+    } else {
       _requestCameraPermission();
+    }
+  }
+
+  Future<void> _toggleCamera() async {
+    if (!_isScanning && !kIsWeb) {
+      final status = await Permission.camera.status;
+      if (!status.isGranted) {
+        await _requestCameraPermission();
+        return;
+      }
+    }
+    setState(() {
+      _isScanning = !_isScanning;
+    });
+    if (_isScanning) {
+      await _scannerController.start();
+    } else {
+      await _scannerController.stop();
     }
   }
 
@@ -238,6 +260,7 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeController>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final hintColor = isDark ? Colors.white54 : Colors.black54;
     final subHintColor = isDark ? Colors.white30 : Colors.black38;
@@ -258,16 +281,7 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
                     _isScanning ? Icons.videocam : Icons.videocam_off,
                     color: isDark ? Colors.white : Colors.black87,
                   ),
-                  onPressed: () {
-                    setState(() {
-                      _isScanning = !_isScanning;
-                    });
-                    if (_isScanning) {
-                      _scannerController.start();
-                    } else {
-                      _scannerController.stop();
-                    }
-                  },
+                  onPressed: _toggleCamera,
                 )
               ],
             ),
@@ -316,16 +330,7 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
                       _isScanning ? Icons.videocam : Icons.videocam_off,
                       color: iconColor,
                     ),
-                    onPressed: () {
-                      setState(() {
-                        _isScanning = !_isScanning;
-                      });
-                      if (_isScanning) {
-                        _scannerController.start();
-                      } else {
-                        _scannerController.stop();
-                      }
-                    },
+                    onPressed: _toggleCamera,
                   ),
                 ],
               ),

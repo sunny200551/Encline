@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../core/constants.dart';
+import '../core/theme_controller.dart';
 import '../core/room_session_controller.dart';
 import '../core/storage_service.dart';
 import '../widgets/gradient_button.dart';
@@ -128,6 +129,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeController>();
     final controller = Provider.of<RoomSessionController>(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final hintColor = isDark ? Colors.white54 : Colors.black54;
