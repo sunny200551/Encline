@@ -26,7 +26,6 @@ class IdenticonWidget extends StatelessWidget {
 
     // Generate a deterministic base color from the public key hex
     final Color mainColor = _getColorFromHex(publicKeyHex);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       width: size,

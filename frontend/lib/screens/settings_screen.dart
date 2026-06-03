@@ -451,7 +451,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   height: 24,
                                   child: Container(
                                     decoration: BoxDecoration(
-                                      color: isPaletteDark ? Colors.black50 : Colors.white70,
+                                      color: isPaletteDark ? Colors.black54 : Colors.white70,
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     alignment: Alignment.center,
