@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import 'package:provider/provider.dart';
 import '../core/constants.dart';
 import '../core/theme_controller.dart';
@@ -196,6 +199,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _showReconnectionSetupDialog(RoomSessionController controller) async {
     final TextEditingController passcodeController = TextEditingController();
+    // Auto-generate a random 6-digit passcode
+    final randomCode = (100000 + Random().nextInt(900000)).toString();
+    passcodeController.text = randomCode;
     bool isLoading = false;
 
     await showDialog(
@@ -208,21 +214,47 @@ class _ChatScreenState extends State<ChatScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                "Set a shared passcode with your peer. When this temporary room expires, you can use it to instantly reconnect.",
+                "Agree on a passcode with your peer, or copy the auto-generated one below to send it to them. Paste it here on both devices to register.",
                 style: TextStyle(fontSize: 12, color: Colors.white70),
               ),
               const SizedBox(height: 16),
-              TextField(
-                controller: passcodeController,
-                autofocus: true,
-                maxLength: 16,
-                obscureText: true,
-                style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2),
-                decoration: const InputDecoration(
-                  hintText: "PASSCODE",
-                  counterText: "",
-                  prefixIcon: Icon(Icons.lock_outline),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: passcodeController,
+                      autofocus: true,
+                      maxLength: 16,
+                      obscureText: false,
+                      style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2),
+                      decoration: const InputDecoration(
+                        hintText: "PASSCODE",
+                        counterText: "",
+                        prefixIcon: Icon(Icons.lock_outline),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.copy, size: 20),
+                    tooltip: "Copy passcode",
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: passcodeController.text));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Passcode copied to clipboard.")),
+                      );
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.paste, size: 20),
+                    tooltip: "Paste passcode",
+                    onPressed: () async {
+                      final data = await Clipboard.getData(Clipboard.kTextPlain);
+                      if (data != null && data.text != null) {
+                        passcodeController.text = data.text!.trim().toUpperCase();
+                      }
+                    },
+                  ),
+                ],
               ),
             ],
           ),

@@ -296,7 +296,7 @@ io.on('connection', (socket) => {
     try {
       const { roomId: rawRoomId, reconnectCode: rawReconnectCode, deviceId } = data;
       const roomId = rawRoomId ? rawRoomId.toUpperCase() : '';
-      const reconnectCode = rawReconnectCode ? rawReconnectCode.trim() : '';
+      const reconnectCode = rawReconnectCode ? rawReconnectCode.trim().toUpperCase() : '';
 
       if (!roomId || !reconnectCode || !deviceId) {
         return callback({ success: false, error: 'Missing required parameters.' });
@@ -367,7 +367,7 @@ io.on('connection', (socket) => {
   socket.on('reconnect-room', (data, callback) => {
     try {
       const { reconnectCode: rawReconnectCode, deviceId, x25519PublicKey, ed25519PublicKey, signature } = data;
-      const reconnectCode = rawReconnectCode ? rawReconnectCode.trim() : '';
+      const reconnectCode = rawReconnectCode ? rawReconnectCode.trim().toUpperCase() : '';
 
       if (!reconnectCode || !deviceId || !x25519PublicKey || !ed25519PublicKey || !signature) {
         return callback({ success: false, error: 'Missing required parameters.' });

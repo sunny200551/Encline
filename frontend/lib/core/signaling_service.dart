@@ -220,8 +220,8 @@ class SignalingService {
     }
 
     final data = {
-      'roomId': roomId,
-      'reconnectCode': reconnectCode,
+      'roomId': roomId.trim().toUpperCase(),
+      'reconnectCode': reconnectCode.trim().toUpperCase(),
       'deviceId': deviceId,
     };
 
@@ -247,7 +247,7 @@ class SignalingService {
     }
 
     final data = {
-      'reconnectCode': reconnectCode,
+      'reconnectCode': reconnectCode.trim().toUpperCase(),
       'deviceId': deviceId,
       'x25519PublicKey': x25519PublicKey,
       'ed25519PublicKey': ed25519PublicKey,
