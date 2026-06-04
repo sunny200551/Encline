@@ -194,6 +194,99 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  Future<void> _showReconnectionSetupDialog(RoomSessionController controller) async {
+    final TextEditingController passcodeController = TextEditingController();
+    bool isLoading = false;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text("Setup Reconnection"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Set a shared passcode with your peer. When this temporary room expires, you can use it to instantly reconnect.",
+                style: TextStyle(fontSize: 12, color: Colors.white70),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: passcodeController,
+                autofocus: true,
+                maxLength: 16,
+                obscureText: true,
+                style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2),
+                decoration: const InputDecoration(
+                  hintText: "PASSCODE",
+                  counterText: "",
+                  prefixIcon: Icon(Icons.lock_outline),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+              onPressed: isLoading
+                  ? null
+                  : () async {
+                      final code = passcodeController.text.trim();
+                      if (code.isEmpty || code.length < 4) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Passcode must be at least 4 characters."),
+                            backgroundColor: AppColors.error,
+                          ),
+                        );
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isLoading = true;
+                      });
+
+                      final response = await controller.registerReconnection(code);
+
+                      if (mounted) {
+                        Navigator.of(context).pop(); // Dismiss dialog
+                        if (response['success'] == true) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Reconnection passcode submitted! Waiting for peer..."),
+                              backgroundColor: AppColors.success,
+                            ),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text("Failed: ${response['error']}"),
+                              backgroundColor: AppColors.error,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              child: isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text("Register", style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
   @override
   void dispose() {
     _countdownTimer?.cancel();
@@ -439,11 +532,18 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           const SizedBox(width: 8),
           IconButton(
+            icon: Icon(Icons.key_outlined, color: iconColor),
+            tooltip: "Setup Reconnection",
+            onPressed: () => _showReconnectionSetupDialog(controller),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
             icon: Icon(Icons.close, color: iconColor),
             tooltip: "Destroy Conversation",
             onPressed: _destroyRoom,
           ),
         ],
+
       ),
     );
   }

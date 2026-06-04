@@ -57,6 +57,8 @@ class RoomSessionController extends ChangeNotifier {
   StreamSubscription? _sigRelaySub;
   StreamSubscription? _sigRoomDestroyedSub;
   StreamSubscription? _sigPeerReconnectedSub;
+  StreamSubscription? _sigReconRegSub;
+
   
   StreamSubscription? _webRTCConnSub;
   StreamSubscription? _webRTCMessageSub;
@@ -121,7 +123,18 @@ class RoomSessionController extends ChangeNotifier {
       print("Controller: Peer reconnected signaling -> ${data['newSocketId']}");
       await _handlePeerReconnected(data);
     });
+
+    _sigReconRegSub = _signaling.reconnectionRegisteredStream.listen((data) async {
+      final reconnectCode = data['reconnectCode'];
+      print("Controller: Reconnection registered on server -> $reconnectCode");
+      _addSystemMessage("Reconnection passcode locked. You can now reconnect using this code.");
+      
+      if (activeRoom != null && activeRoom!.peerEd25519PublicKeyHex != null) {
+        await _storage.updateContactPasscode(activeRoom!.peerEd25519PublicKeyHex!, reconnectCode);
+      }
+    });
   }
+
 
   // Setup listeners for WebRTC events
   void _setupWebRTCStreams() {
@@ -356,6 +369,126 @@ class RoomSessionController extends ChangeNotifier {
       print("Controller: Error rejoining room: $e");
     }
   }
+
+  // Register reconnection passcode
+  Future<Map<String, dynamic>> registerReconnection(String passcode) async {
+    if (activeRoom == null) {
+      return {'success': false, 'error': 'No active room.'};
+    }
+    try {
+      final deviceId = await _storage.getOrCreateDeviceId();
+      final result = await _signaling.registerReconnection(
+        roomId: activeRoom!.id,
+        reconnectCode: passcode,
+        deviceId: deviceId,
+      );
+      return result;
+    } catch (e) {
+      print("Controller error registering reconnection: $e");
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // Reconnect room using passcode and device ID
+  Future<void> reconnectWithPasscode({
+    required String serverUrl,
+    required String passcode,
+    String? expectedEd25519PublicKeyHex,
+  }) async {
+    try {
+      connectedServerUrl = serverUrl;
+      _updateStatus(SessionStatus.connectingSignaling);
+      _signaling.connect(serverUrl);
+      
+      await _waitForSignalingConnection();
+      
+      _updateStatus(SessionStatus.joiningRoom);
+      
+      _myX25519KeyPair = await _encryption.generateX25519KeyPair();
+      _myEd25519KeyPair = await _getOrCreateMyEd25519KeyPair();
+      
+      final myX25519Hex = await _encryption.getPublicKeyHex(_myX25519KeyPair!);
+      final myEd25519Hex = await _encryption.getPublicKeyHex(_myEd25519KeyPair!);
+      final signature = await _encryption.signMessage(myX25519Hex, _myEd25519KeyPair!);
+      final deviceId = await _storage.getOrCreateDeviceId();
+
+      final response = await _signaling.reconnectRoom(
+        reconnectCode: passcode,
+        deviceId: deviceId,
+        x25519PublicKey: myX25519Hex,
+        ed25519PublicKey: myEd25519Hex,
+        signature: signature,
+      );
+
+      if (response['success'] == true) {
+        final expirationTime = DateTime.fromMillisecondsSinceEpoch(response['expirationTime']);
+        final messageExpirationMinutes = response['messageExpirationMinutes'];
+        
+        final myX25519PrivHex = await _encryption.getPrivateKeyHex(_myX25519KeyPair!);
+        final myEd25519PrivHex = await _encryption.getPrivateKeyHex(_myEd25519KeyPair!);
+
+        activeRoom = Room(
+          id: passcode,
+          expirationTime: expirationTime,
+          messageExpirationMinutes: messageExpirationMinutes,
+          isHost: false, // Defaulting to guest peer logic for E2EE handshake symmetric role
+          myX25519PublicKeyHex: myX25519Hex,
+          myEd25519PublicKeyHex: myEd25519Hex,
+          myX25519PrivateKeyHex: myX25519PrivHex,
+          myEd25519PrivateKeyHex: myEd25519PrivHex,
+        );
+
+        messages = [];
+        _addSystemMessage("Reconnected using passcode. Performing handshake...");
+        _updateStatus(SessionStatus.negotiatingEncryption);
+
+        final peer = response['peer'];
+        if (peer != null) {
+          final peerSocketId = peer['socketId'];
+          final peerX25519Hex = peer['x25519PublicKey'];
+          final peerEd25519Hex = peer['ed25519PublicKey'];
+          final peerSignature = peer['signature'];
+
+          if (expectedEd25519PublicKeyHex != null && expectedEd25519PublicKeyHex != peerEd25519Hex) {
+            throw Exception("Security Warning: Man-in-the-middle detected! Peer Ed25519 public key mismatch.");
+          }
+
+          await _verifyPeerHandshake(
+            peerX25519Hex: peerX25519Hex,
+            peerEd25519Hex: peerEd25519Hex,
+            peerSignatureHex: peerSignature,
+          );
+
+          activeRoom!.peerX25519PublicKeyHex = peerX25519Hex;
+          activeRoom!.peerEd25519PublicKeyHex = peerEd25519Hex;
+
+          final sharedSecret = await _encryption.performECDH(_myX25519KeyPair!, peerX25519Hex);
+          final derivedKey = await _encryption.deriveSymmetricKey(sharedSecret);
+          activeRoom!.symmetricKey = derivedKey;
+          
+          await _storage.saveRoom(activeRoom!);
+          _addSystemMessage("Handshake complete. End-to-end encryption established.");
+          _updateStatus(SessionStatus.handshakeComplete);
+
+          await _webrtc.initialize(
+            roomId: passcode,
+            targetSocketId: peerSocketId,
+            signaling: _signaling,
+            isHost: false,
+          );
+        } else {
+          // Waiting for host or peer to join
+          _addSystemMessage("Waiting for peer to reconnect...");
+          _updateStatus(SessionStatus.waitingForPeer);
+        }
+      } else {
+        throw Exception(response['error'] ?? 'Signaling server rejected reconnection');
+      }
+    } catch (e) {
+      _handleError(e.toString());
+    }
+  }
+
 
   // Handle other peer reconnecting and shifting WebRTC socket target
   Future<void> _handlePeerReconnected(Map<String, dynamic> data) async {
@@ -781,6 +914,7 @@ class RoomSessionController extends ChangeNotifier {
     _sigConnSub?.cancel();
     _sigPeerJoinedSub?.cancel();
     _sigPeerReconnectedSub?.cancel();
+    _sigReconRegSub?.cancel();
     _sigPeerLeftSub?.cancel();
     _sigSignalSub?.cancel();
     _sigRelaySub?.cancel();

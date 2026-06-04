@@ -5,12 +5,14 @@ class TrustedContact {
   final String x25519PublicKeyHex;
   final String ed25519PublicKeyHex;
   final DateTime addedAt;
+  final String? reconnectPasscode;
 
   TrustedContact({
     required this.nickname,
     required this.x25519PublicKeyHex,
     required this.ed25519PublicKeyHex,
     required this.addedAt,
+    this.reconnectPasscode,
   });
 
   Map<String, dynamic> toMap() {
@@ -19,6 +21,7 @@ class TrustedContact {
       'x25519PublicKeyHex': x25519PublicKeyHex,
       'ed25519PublicKeyHex': ed25519PublicKeyHex,
       'addedAt': addedAt.toIso8601String(),
+      'reconnectPasscode': reconnectPasscode,
     };
   }
 
@@ -30,6 +33,7 @@ class TrustedContact {
       addedAt: map['addedAt'] != null 
           ? DateTime.parse(map['addedAt']) 
           : DateTime.now(),
+      reconnectPasscode: map['reconnectPasscode'],
     );
   }
 

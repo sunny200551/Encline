@@ -12,6 +12,7 @@ class SignalingService {
   final _relayedMessageController = StreamController<Map<String, dynamic>>.broadcast();
   final _roomDestroyedController = StreamController<String>.broadcast();
   final _peerReconnectedController = StreamController<Map<String, dynamic>>.broadcast();
+  final _reconnectionRegisteredController = StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<bool> get connectionStream => _connectionController.stream;
   Stream<Map<String, dynamic>> get peerJoinedStream => _peerJoinedController.stream;
@@ -20,6 +21,8 @@ class SignalingService {
   Stream<Map<String, dynamic>> get relayedMessageStream => _relayedMessageController.stream;
   Stream<String> get roomDestroyedStream => _roomDestroyedController.stream;
   Stream<Map<String, dynamic>> get peerReconnectedStream => _peerReconnectedController.stream;
+  Stream<Map<String, dynamic>> get reconnectionRegisteredStream => _reconnectionRegisteredController.stream;
+
 
   bool get isConnected => _socket?.connected ?? false;
   String? get socketId => _socket?.id;
@@ -99,6 +102,15 @@ class SignalingService {
         _roomDestroyedController.add(data['roomId']?.toString() ?? '');
       }
     });
+
+    // Handle reconnection registered event
+    _socket!.on('reconnection-registered', (data) {
+      print("Signaling event: reconnection-registered -> $data");
+      if (data != null) {
+        _reconnectionRegisteredController.add(Map<String, dynamic>.from(data));
+      }
+    });
+
 
     _socket!.connect();
   }
@@ -195,6 +207,61 @@ class SignalingService {
     _socket!.emit('destroy-room', { 'roomId': roomId });
   }
 
+  // Register reconnection passcode with device ID
+  Future<Map<String, dynamic>> registerReconnection({
+    required String roomId,
+    required String reconnectCode,
+    required String deviceId,
+  }) {
+    final completer = Completer<Map<String, dynamic>>();
+
+    if (_socket == null || !_socket!.connected) {
+      return Future.value({'success': false, 'error': 'Not connected to signaling server'});
+    }
+
+    final data = {
+      'roomId': roomId,
+      'reconnectCode': reconnectCode,
+      'deviceId': deviceId,
+    };
+
+    _socket!.emitWithAck('register-reconnection', data, ack: (response) {
+      completer.complete(response);
+    });
+
+    return completer.future;
+  }
+
+  // Reconnect room using passcode and device ID
+  Future<Map<String, dynamic>> reconnectRoom({
+    required String reconnectCode,
+    required String deviceId,
+    required String x25519PublicKey,
+    required String ed25519PublicKey,
+    required String signature,
+  }) {
+    final completer = Completer<Map<String, dynamic>>();
+
+    if (_socket == null || !_socket!.connected) {
+      return Future.value({'success': false, 'error': 'Not connected to signaling server'});
+    }
+
+    final data = {
+      'reconnectCode': reconnectCode,
+      'deviceId': deviceId,
+      'x25519PublicKey': x25519PublicKey,
+      'ed25519PublicKey': ed25519PublicKey,
+      'signature': signature,
+    };
+
+    _socket!.emitWithAck('reconnect-room', data, ack: (response) {
+      completer.complete(response);
+    });
+
+    return completer.future;
+  }
+
+
   // Disconnect from signaling server
   void disconnect() {
     _socket?.disconnect();
@@ -209,5 +276,6 @@ class SignalingService {
     _signalController.close();
     _relayedMessageController.close();
     _roomDestroyedController.close();
+    _reconnectionRegisteredController.close();
   }
 }

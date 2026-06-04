@@ -129,10 +129,65 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _reconnectToContact(TrustedContact contact) async {
     final String serverUrl = await _storage.getDefaultServerUrl();
-    final TextEditingController idController = TextEditingController();
-
+    
     if (!mounted) return;
 
+    final controller = Provider.of<RoomSessionController>(context, listen: false);
+    controller.expectedEd25519Key = contact.ed25519PublicKeyHex;
+
+    final bool hasPasscode = contact.reconnectPasscode != null && contact.reconnectPasscode!.isNotEmpty;
+
+    if (hasPasscode) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text("Reconnect to ${contact.nickname}"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "You have a locked reconnection passcode with ${contact.nickname}. "
+                "Select 'Quick Reconnect' to establish a secure link instantly without exchanging codes.",
+                style: const TextStyle(fontSize: 13, color: Colors.white70),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                "Passcode: ${contact.reconnectPasscode}",
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _showRoomIdReconnectDialog(contact, serverUrl);
+              },
+              child: const Text("Use Room ID"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _performPasscodeReconnection(contact, serverUrl, contact.reconnectPasscode!);
+              },
+              child: const Text("Quick Reconnect", style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+    } else {
+      _showRoomIdReconnectDialog(contact, serverUrl);
+    }
+  }
+
+  void _showRoomIdReconnectDialog(TrustedContact contact, String serverUrl) {
+    final TextEditingController idController = TextEditingController();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -172,67 +227,121 @@ class _HomeScreenState extends State<HomeScreen> {
               if (roomId.length != 6) return;
 
               Navigator.of(context).pop(); // Dismiss reconnect dialog
-
-              final isDesktop = MediaQuery.of(context).size.width >= 720;
-              final controller = Provider.of<RoomSessionController>(context, listen: false);
-
-              // Pin expected Ed25519 key for validation
-              controller.expectedEd25519Key = contact.ed25519PublicKeyHex;
-
-              if (isDesktop) {
-                setState(() {
-                  _desktopView = 'chat';
-                });
-
-                try {
-                  await controller.joinRoom(
-                    serverUrl: serverUrl,
-                    roomId: roomId,
-                    expectedEd25519PublicKeyHex: contact.ed25519PublicKeyHex,
-                  );
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(e.toString()), backgroundColor: AppColors.error),
-                  );
-                  setState(() {
-                    _desktopView = 'welcome';
-                  });
-                }
-              } else {
-                // Show loading spinner
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (context) => const Center(child: CircularProgressIndicator()),
-                );
-
-                try {
-                  await controller.joinRoom(
-                    serverUrl: serverUrl,
-                    roomId: roomId,
-                    expectedEd25519PublicKeyHex: contact.ed25519PublicKeyHex,
-                  );
-                  if (mounted) {
-                    Navigator.of(context).pop(); // Dismiss spinner
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => const ChatScreen()),
-                    ).then((_) => _loadRecentRooms());
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    Navigator.of(context).pop(); // Dismiss spinner
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(e.toString()), backgroundColor: AppColors.error),
-                    );
-                  }
-                }
-              }
+              await _performRoomIdReconnection(contact, serverUrl, roomId);
             },
             child: const Text("Connect & Verify", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _performRoomIdReconnection(TrustedContact contact, String serverUrl, String roomId) async {
+    final isDesktop = MediaQuery.of(context).size.width >= 720;
+    final controller = Provider.of<RoomSessionController>(context, listen: false);
+
+    if (isDesktop) {
+      setState(() {
+        _desktopView = 'chat';
+      });
+
+      try {
+        await controller.joinRoom(
+          serverUrl: serverUrl,
+          roomId: roomId,
+          expectedEd25519PublicKeyHex: contact.ed25519PublicKeyHex,
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: AppColors.error),
+        );
+        setState(() {
+          _desktopView = 'welcome';
+        });
+      }
+    } else {
+      // Show loading spinner
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      try {
+        await controller.joinRoom(
+          serverUrl: serverUrl,
+          roomId: roomId,
+          expectedEd25519PublicKeyHex: contact.ed25519PublicKeyHex,
+        );
+        if (mounted) {
+          Navigator.of(context).pop(); // Dismiss spinner
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (context) => const ChatScreen()),
+          ).then((_) => _loadRecentRooms());
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.of(context).pop(); // Dismiss spinner
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString()), backgroundColor: AppColors.error),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _performPasscodeReconnection(TrustedContact contact, String serverUrl, String passcode) async {
+    final isDesktop = MediaQuery.of(context).size.width >= 720;
+    final controller = Provider.of<RoomSessionController>(context, listen: false);
+
+    if (isDesktop) {
+      setState(() {
+        _desktopView = 'chat';
+      });
+
+      try {
+        await controller.reconnectWithPasscode(
+          serverUrl: serverUrl,
+          passcode: passcode,
+          expectedEd25519PublicKeyHex: contact.ed25519PublicKeyHex,
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: AppColors.error),
+        );
+        setState(() {
+          _desktopView = 'welcome';
+        });
+      }
+    } else {
+      // Show loading spinner
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      try {
+        await controller.reconnectWithPasscode(
+          serverUrl: serverUrl,
+          passcode: passcode,
+          expectedEd25519PublicKeyHex: contact.ed25519PublicKeyHex,
+        );
+        if (mounted) {
+          Navigator.of(context).pop(); // Dismiss spinner
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (context) => const ChatScreen()),
+          ).then((_) => _loadRecentRooms());
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.of(context).pop(); // Dismiss spinner
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString()), backgroundColor: AppColors.error),
+          );
+        }
+      }
+    }
   }
 
   @override

@@ -263,9 +263,7 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
     context.watch<ThemeController>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final hintColor = isDark ? Colors.white54 : Colors.black54;
-    final subHintColor = isDark ? Colors.white30 : Colors.black38;
     final iconColor = isDark ? Colors.white70 : Colors.black54;
-    final textColor = isDark ? Colors.white : Colors.black87;
 
     return Scaffold(
       backgroundColor: widget.isEmbedded ? Colors.transparent : AppColors.background,

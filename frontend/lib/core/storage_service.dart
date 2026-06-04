@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/room.dart';
 import '../models/message.dart';
 import '../models/trusted_contact.dart';
+import 'package:uuid/uuid.dart';
+
 
 class StorageService {
   static const String _roomsKey = 'encline_recent_rooms';
@@ -16,6 +18,8 @@ class StorageService {
   static const String _contactsKey = 'encline_trusted_contacts';
   static const String _myPrivateKeyKey = 'encline_my_ed25519_private_key';
   static const String _myPublicKeyKey = 'encline_my_ed25519_public_key';
+  static const String _deviceIdKey = 'encline_device_id';
+
 
   // Helper to get local storage directory
   Future<Directory> get _localDirectory async {
@@ -105,6 +109,34 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_contactsKey, contacts.map((c) => c.toJson()).toList());
   }
+
+  Future<void> updateContactPasscode(String ed25519PublicKeyHex, String passcode) async {
+    final contacts = await getTrustedContacts();
+    final index = contacts.indexWhere((c) => c.ed25519PublicKeyHex == ed25519PublicKeyHex);
+    if (index != -1) {
+      final old = contacts[index];
+      contacts[index] = TrustedContact(
+        nickname: old.nickname,
+        x25519PublicKeyHex: old.x25519PublicKeyHex,
+        ed25519PublicKeyHex: old.ed25519PublicKeyHex,
+        addedAt: old.addedAt,
+        reconnectPasscode: passcode,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_contactsKey, contacts.map((c) => c.toJson()).toList());
+    }
+  }
+
+  Future<String> getOrCreateDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? deviceId = prefs.getString(_deviceIdKey);
+    if (deviceId == null || deviceId.isEmpty) {
+      deviceId = const Uuid().v4();
+      await prefs.setString(_deviceIdKey, deviceId);
+    }
+    return deviceId;
+  }
+
 
   Future<void> removeTrustedContact(String ed25519KeyHex) async {
     final contacts = await getTrustedContacts();

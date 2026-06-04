@@ -45,6 +45,11 @@ const PORT = process.env.PORT || 3000;
 // }
 const rooms = {};
 
+// Memory storage for persistent device pairings and passcodes
+const reconnectableRooms = {};
+const pendingReconnections = {};
+
+
 // Helper to generate a unique room ID
 function generateRoomId() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Avoid easily confused characters (O, 0, I, 1)
@@ -284,6 +289,205 @@ io.on('connection', (socket) => {
       destroyRoom(roomId);
     }
   });
+
+  // 7. Register Reconnection Passcode
+  // Expected input: { roomId, reconnectCode, deviceId }
+  socket.on('register-reconnection', (data, callback) => {
+    try {
+      const { roomId: rawRoomId, reconnectCode: rawReconnectCode, deviceId } = data;
+      const roomId = rawRoomId ? rawRoomId.toUpperCase() : '';
+      const reconnectCode = rawReconnectCode ? rawReconnectCode.trim() : '';
+
+      if (!roomId || !reconnectCode || !deviceId) {
+        return callback({ success: false, error: 'Missing required parameters.' });
+      }
+
+      const room = rooms[roomId];
+      if (!room) {
+        return callback({ success: false, error: 'Active room not found.' });
+      }
+
+      // Verify the socket is in this room
+      const peer = room.peers.find(p => p.socketId === socket.id);
+      if (!peer) {
+        return callback({ success: false, error: 'Unauthorized: You are not a peer in this room.' });
+      }
+
+      // Initialize pending registrations for this reconnectCode
+      if (!pendingReconnections[reconnectCode]) {
+        pendingReconnections[reconnectCode] = {
+          roomId,
+          peers: []
+        };
+      }
+
+      const pending = pendingReconnections[reconnectCode];
+      
+      // Prevent duplicate device registration for the same code
+      if (!pending.peers.some(p => p.deviceId === deviceId)) {
+        pending.peers.push({
+          deviceId,
+          socketId: socket.id,
+          ed25519PublicKey: peer.ed25519PublicKey,
+          x25519PublicKey: peer.x25519PublicKey
+        });
+      }
+
+      console.log(`Device ${deviceId} registered reconnection code '${reconnectCode}' for room ${roomId}`);
+
+      // When both peers have registered, finalize the reconnectable room
+      if (pending.peers.length >= 2) {
+        reconnectableRooms[reconnectCode] = {
+          code: reconnectCode,
+          peers: pending.peers.map(p => ({
+            deviceId: p.deviceId,
+            ed25519PublicKey: p.ed25519PublicKey,
+            x25519PublicKey: p.x25519PublicKey
+          }))
+        };
+        
+        // Notify both sockets in the active room that reconnection is locked
+        io.to(roomId).emit('reconnection-registered', { reconnectCode });
+        
+        // Clean up pending
+        delete pendingReconnections[reconnectCode];
+        
+        console.log(`Reconnection passcode '${reconnectCode}' successfully locked for 2 devices.`);
+      }
+
+      callback({ success: true });
+    } catch (err) {
+      console.error('Error registering reconnection:', err);
+      callback({ success: false, error: 'Internal server error.' });
+    }
+  });
+
+  // 8. Reconnect via Passcode
+  // Expected input: { reconnectCode, deviceId, x25519PublicKey, ed25519PublicKey, signature }
+  socket.on('reconnect-room', (data, callback) => {
+    try {
+      const { reconnectCode: rawReconnectCode, deviceId, x25519PublicKey, ed25519PublicKey, signature } = data;
+      const reconnectCode = rawReconnectCode ? rawReconnectCode.trim() : '';
+
+      if (!reconnectCode || !deviceId || !x25519PublicKey || !ed25519PublicKey || !signature) {
+        return callback({ success: false, error: 'Missing required parameters.' });
+      }
+
+      const savedRoom = reconnectableRooms[reconnectCode];
+      if (!savedRoom) {
+        return callback({ success: false, error: 'Reconnection passcode not found or expired.' });
+      }
+
+      // Verify deviceId is authorized for this reconnectCode
+      const registeredPeer = savedRoom.peers.find(p => p.deviceId === deviceId);
+      if (!registeredPeer) {
+        return callback({ success: false, error: 'Unauthorized: This device is not registered to use this passcode.' });
+      }
+
+      // Verify that the connecting ed25519PublicKey matches the registered one
+      if (registeredPeer.ed25519PublicKey !== ed25519PublicKey) {
+        return callback({ success: false, error: 'Security alert: Identity key mismatch for this device.' });
+      }
+
+      // Find or create active temporary room mapped to this reconnectCode
+      let room = rooms[reconnectCode];
+      if (!room) {
+        // Create a new temporary room using the reconnectCode as the roomId
+        const roomExpirationMinutes = 30; // Default expiration for reconnection sessions
+        const expirationTime = Date.now() + (roomExpirationMinutes * 60 * 1000);
+        
+        const destroyTimeoutId = setTimeout(() => {
+          destroyRoom(reconnectCode);
+        }, roomExpirationMinutes * 60 * 1000);
+
+        room = {
+          id: reconnectCode,
+          expirationTime,
+          messageExpirationMinutes: 10, // Default message expiration
+          peers: [],
+          destroyTimeoutId
+        };
+        rooms[reconnectCode] = room;
+        console.log(`Temporary Room ${reconnectCode} recreated for reconnection.`);
+      }
+
+      // Check if peer is already registered in the active room (session recovery)
+      const existingPeerIndex = room.peers.findIndex(p => p.ed25519PublicKey === ed25519PublicKey);
+      if (existingPeerIndex !== -1) {
+        const oldSocketId = room.peers[existingPeerIndex].socketId;
+        room.peers[existingPeerIndex].socketId = socket.id;
+        
+        socket.join(reconnectCode);
+        console.log(`Socket ${socket.id} (device ${deviceId}) re-joined active reconnection room ${reconnectCode}`);
+
+        const otherPeer = room.peers.find((p, idx) => idx !== existingPeerIndex);
+        if (otherPeer) {
+          io.to(otherPeer.socketId).emit('peer-reconnected', {
+            oldSocketId,
+            newSocketId: socket.id,
+            ed25519PublicKey
+          });
+        }
+
+        return callback({
+          success: true,
+          roomId: reconnectCode,
+          expirationTime: room.expirationTime,
+          messageExpirationMinutes: room.messageExpirationMinutes,
+          peer: otherPeer ? {
+            socketId: otherPeer.socketId,
+            x25519PublicKey: otherPeer.x25519PublicKey,
+            ed25519PublicKey: otherPeer.ed25519PublicKey,
+            signature: otherPeer.signature
+          } : null
+        });
+      }
+
+      if (room.peers.length >= 2) {
+        return callback({ success: false, error: 'Reconnection room is already full.' });
+      }
+
+      // Add to peers list
+      room.peers.push({
+        socketId: socket.id,
+        x25519PublicKey,
+        ed25519PublicKey,
+        signature
+      });
+
+      socket.join(reconnectCode);
+      console.log(`Socket ${socket.id} (device ${deviceId}) joined reconnection room ${reconnectCode}`);
+
+      // Notify other peer if present
+      const otherPeer = room.peers.find(p => p.socketId !== socket.id);
+      if (otherPeer) {
+        io.to(otherPeer.socketId).emit('peer-joined', {
+          socketId: socket.id,
+          x25519PublicKey,
+          ed25519PublicKey,
+          signature
+        });
+      }
+
+      callback({
+        success: true,
+        roomId: reconnectCode,
+        expirationTime: room.expirationTime,
+        messageExpirationMinutes: room.messageExpirationMinutes,
+        peer: otherPeer ? {
+          socketId: otherPeer.socketId,
+          x25519PublicKey: otherPeer.x25519PublicKey,
+          ed25519PublicKey: otherPeer.ed25519PublicKey,
+          signature: otherPeer.signature
+        } : null
+      });
+
+    } catch (err) {
+      console.error('Error in reconnect-room:', err);
+      callback({ success: false, error: 'Internal server error.' });
+    }
+  });
+
 
   // 6. Disconnect
   socket.on('disconnect', () => {
